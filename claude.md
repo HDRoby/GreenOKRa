@@ -170,8 +170,14 @@ Read `SPEC.md` for the whole of it. The parts most easily got wrong:
 - **`review_cadence` is an enum** — Weekly, Bi-Weekly, Monthly, Quarterly,
   6 Months, Yearly — because the editor measures the newest progress note
   against it
-- **Ids are permanent.** Dropped work becomes `Aborted` and keeps its id;
-  numbering never reissues one
+- **An empty list is legal at every level.** A file is built downwards, so a
+  container exists before its contents. At the top that is simply a new file
+  and passes without comment; an initiative with no objectives, or an objective
+  with no key results, warns
+- **Aborting and deleting differ.** `Aborted` drops the work from every rollup
+  and keeps its id spoken for. Deleting removes the record and **frees the id**,
+  so the next one added takes it — repointing anything that referred to the old
+  one. Delete what was never really there; abort what was
 
 ## Web UI
 
@@ -196,8 +202,9 @@ Conventions worth keeping:
 - **Text fields commit on blur**, not per keystroke, because validation
   normalises values and normalising mid-word fights the person typing. Selects
   commit immediately
-- **One component per affordance.** `AddButton`, `LabelPicker`, `PersonPicker`
-  and `Dropdown` exist so the same control cannot drift apart in four places
+- **One component per affordance.** `AddButton`, `LabelPicker`, `PersonPicker`,
+  `DeleteButton`, `Dropdown` and `Wordmark` exist so the same control cannot
+  drift apart in four places
 - **Colours live in one map.** `TONES` in `fields.tsx` holds each value's pill,
   text and bar spellings in a single entry, because Tailwind only sees literal
   class names — `text-${colour}` never reaches the stylesheet, so composing one
@@ -216,22 +223,43 @@ Conventions worth keeping:
 - **Browser-only.** No API routes, no server actions touching a filesystem, no
   database
 
+Two CSS traps, both from the same cause — Tailwind's reset and layers outrank
+plain CSS in ways that are silent when they bite:
+
+- **Custom classes belong in `@layer components`.** Unlayered CSS outranks
+  every Tailwind utility, so `.field { width: 100% }` written plainly was
+  beating every `w-*` a field was given — for several rounds, invisibly. If a
+  utility appears to do nothing, check what layer its competition is in
+- **A modal `<dialog>` needs `m-auto`.** It centres itself on `margin: auto`,
+  which the reset zeroes, so without it the dialog opens in the corner
+
 ## Editing OKR files
 
 - Run `check` after editing anything in `okrs/`
 - Never hand-write a percentage — the status carries it
 - Never write a person inline; add them to `people` and refer to them
-- Never renumber an id. Records can be deleted, behind a confirmation, but
-  deleting **frees the id** for the next record to take — so prefer
-  `status: Aborted` for work that was real, which keeps the id spoken for
+- Never renumber an id, and prefer `Aborted` to deleting for work that was
+  real — see the format summary above for why
 - Progress notes are editable, and the log re-sorts newest-first when one is
-  re-dated
+  re-dated. Clearing a note's text deletes the entry
+- A new record leaves out the fields only an author can supply, rather than
+  writing them empty: `missing required field` reads better than
+  `must not be empty`, and the file stays clean
 
-## The name
+## The name and the mark
 
 **GreenOKRa** everywhere — the app, the repository, the npm package and the
-docs. The logo's wordmark reads "GreenOKR", since it is artwork rather than
-text; that is the one place the two differ.
+docs.
+
+The name is **set as text**, not drawn: `components/wordmark.tsx` puts it beside
+the okra mark in two greens sampled from the original artwork. The artwork's own
+wordmark reads "GreenOKR" and predates the trailing "a", so only the pod is used
+from it. `public/logo.png` still holds the full lockup and is no longer
+referenced.
+
+The darker green is **lifted** from the sampled `rgb(24 90 56)`, which reaches
+only 2:1 against this canvas and cannot be read. Sample brand colours, then
+check them: a value that is right in the artwork can be wrong on a dark page.
 
 ## What NOT to do
 
