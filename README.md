@@ -89,19 +89,47 @@ Requires Node 23.6 or newer, which runs TypeScript without a build step.
 
 ## The editor
 
-A static web app (Next.js, Tailwind, shadcn/ui, dark by default) that runs
-entirely in the browser:
+```bash
+cd web && npm install && npm run dev     # http://localhost:3000
+```
 
-- **Open** a `.yaml` file from disk
-- **View** initiatives, objectives and key results with computed progress
-- **Edit** fields, statuses, and prepend progress notes
-- **Save** the file back to disk, comments and field order preserved as far as possible
+A static Next.js app (Tailwind, Lucide icons, dark by default) that runs
+entirely in the browser. No backend, no auth, no database, nothing uploaded.
+You keep the files; git is the history.
 
-No backend, no auth, no database. You keep the files; git is the history.
+- **Open** a `.yaml` file from disk, or load the bundled example
+- **View** initiatives, objectives and key results with progress computed live
+- **Edit** any field in place — click, type, tab away. Selects for status,
+  priority and complexity
+- **Add** initiatives, objectives, key results and links
+- **Save** back to the file you opened, with `⌘S`
+
+Everything is validated as you type, and the counter in the header opens a panel
+listing errors, warnings and anything that was tidied.
+
+### Two deliberate omissions
+
+**You cannot delete anything.** Ids must stay stable — a ticket referencing
+`TEK.O1.KR2` should still resolve next year. Dropped work is set to `Aborted`,
+which excludes it from progress while keeping its id. Numbering never reuses a
+retired id either: abort `KR2` and the next key result is `KR3`.
+
+**Existing progress notes are read-only.** The log is append-only by design; new
+notes go on top.
+
+### Saving in place
+
+Chrome and Edge implement the File System Access API, so `Save` writes back to
+the file you opened. Safari and Firefox don't, so the button becomes `Download`
+and you get a copy. Formatting is preserved either way — comments, folded prose
+and field order all survive the round trip.
+
+Build a deployable copy with `npm run build`; the result is a plain folder of
+static files.
 
 ## Status
 
-Format spec and validator: done. Editor: next.
+Format spec, validator and editor: done.
 
 ## License
 

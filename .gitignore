@@ -1,7 +1,12 @@
 # Node
 node_modules/
 .next/
+out/
 *.tsbuildinfo
+next-env.d.ts
+
+# Copied from okrs/ at build time by `npm run copy:example`
+web/public/example.yaml
 
 # Local editor / assistant settings
 .claude/settings.local.json

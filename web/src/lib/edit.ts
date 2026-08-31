@@ -1,0 +1,323 @@
+/**
+ * Editing operations on a parsed document.
+ *
+ * Every function here mutates the document in place and preserves comments.
+ * Two rules from SPEC.md are enforced structurally rather than by asking the
+ * user to remember them:
+ *
+ * - New fields are inserted in the order SPEC.md documents, not appended.
+ * - Identifiers are never reused. Nothing can be deleted; dropped work gets
+ *   `status: Aborted` and keeps its id forever.
+ */
+
+import { Document, Pair, Scalar, YAMLMap, YAMLSeq, isMap, isScalar, isSeq } from 'yaml'
+
+import { KR_KEYS, OBJECTIVE_KEYS, SI_KEYS } from './okr.ts'
+
+export type Path = (string | number)[]
+
+export const initiativePath = (initiative: number): Path => [
+  'strategic_initiatives',
+  initiative,
+]
+
+export const objectivePath = (initiative: number, objective: number): Path => [
+  ...initiativePath(initiative),
+  'objectives',
+  objective,
+]
+
+export const keyResultPath = (
+  initiative: number,
+  objective: number,
+  keyResult: number,
+): Path => [...objectivePath(initiative, objective), 'key_results', keyResult]
+
+function keyOf(pair: Pair<unknown, unknown>): string {
+  return isScalar(pair.key) ? String(pair.key.value) : String(pair.key)
+}
+
+/**
+ * Set a field, inserting it at its documented position when it is new.
+ *
+ * Existing scalars are mutated rather than replaced, so a folded block (`>`)
+ * stays folded and any comment attached to the value survives.
+ */
+export function setField(
+  doc: Document,
+  parent: Path,
+  key: string,
+  value: string,
+  order: readonly string[],
+): void {
+  const map = doc.getIn(parent, true)
+  if (!isMap(map)) return
+
+  const existing = map.items.find((pair) => keyOf(pair) === key)
+  if (existing) {
+    if (isScalar(existing.value)) {
+      existing.value.value = value
+    } else {
+      existing.value = new Scalar(value)
+    }
+    return
+  }
+
+  const target = order.indexOf(key)
+  let insertAt = map.items.length
+  for (const [index, pair] of map.items.entries()) {
+    const position = order.indexOf(keyOf(pair))
+    if (position > target) {
+      insertAt = index
+      break
+    }
+  }
+  map.items.splice(insertAt, 0, new Pair(new Scalar(key), new Scalar(value)))
+}
+
+/** Set an optional field, removing the key entirely when cleared. */
+export function setOptionalField(
+  doc: Document,
+  parent: Path,
+  key: string,
+  value: string,
+  order: readonly string[],
+): void {
+  if (value.trim() === '') {
+    const map = doc.getIn(parent, true)
+    if (isMap(map)) {
+      map.items = map.items.filter((pair) => keyOf(pair) !== key)
+    }
+    return
+  }
+  setField(doc, parent, key, value, order)
+}
+
+/**
+ * Set a numeric field. Numbers need a number scalar: writing the string '40'
+ * would be emitted quoted, and then read back as text.
+ */
+export function setNumberField(
+  doc: Document,
+  parent: Path,
+  key: string,
+  value: number | null,
+  order: readonly string[],
+): void {
+  const map = doc.getIn(parent, true)
+  if (!isMap(map)) return
+
+  if (value === null) {
+    map.items = map.items.filter((pair) => keyOf(pair) !== key)
+    return
+  }
+
+  const existing = map.items.find((pair) => keyOf(pair) === key)
+  if (existing) {
+    existing.value = new Scalar(value)
+    return
+  }
+  insertOrdered(map, key, new Scalar(value), order)
+}
+
+/** Replace one RACI role's list of names. Clearing it removes the role. */
+export function setOwners(
+  doc: Document,
+  keyResult: Path,
+  role: string,
+  names: string[],
+): void {
+  const owners = doc.getIn([...keyResult, 'owners'], true)
+  if (!isMap(owners)) return
+
+  if (names.length === 0) {
+    owners.items = owners.items.filter((pair) => keyOf(pair) !== role)
+    return
+  }
+
+  const list = new YAMLSeq()
+  list.flow = true
+  for (const name of names) list.add(new Scalar(name))
+
+  const existing = owners.items.find((pair) => keyOf(pair) === role)
+  if (existing) {
+    existing.value = list
+  } else {
+    owners.items.push(new Pair(new Scalar(role), list))
+  }
+}
+
+/** Replace an objective's plain list of owner names. */
+export function setObjectiveOwners(
+  doc: Document,
+  objective: Path,
+  names: string[],
+): void {
+  const map = doc.getIn(objective, true)
+  if (!isMap(map)) return
+
+  if (names.length === 0) {
+    map.items = map.items.filter((pair) => keyOf(pair) !== 'owners')
+    return
+  }
+
+  const list = new YAMLSeq()
+  list.flow = true
+  for (const name of names) list.add(new Scalar(name))
+
+  const existing = map.items.find((pair) => keyOf(pair) === 'owners')
+  if (existing) {
+    existing.value = list
+  } else {
+    insertOrdered(map, 'owners', list, OBJECTIVE_KEYS)
+  }
+}
+
+export function addLink(doc: Document, objective: Path): void {
+  const map = doc.getIn(objective, true)
+  if (!isMap(map)) return
+  let links = doc.getIn([...objective, 'links'], true)
+  if (!isSeq(links)) {
+    links = new YAMLSeq()
+    insertOrdered(map, 'links', links as YAMLSeq, OBJECTIVE_KEYS)
+  }
+  ;(links as YAMLSeq).items.push(doc.createNode({ title: '', url: '' }))
+}
+
+/** Links carry no identifier, so unlike OKRs they can simply be removed. */
+export function removeLink(doc: Document, objective: Path, index: number): void {
+  const links = doc.getIn([...objective, 'links'], true)
+  if (!isSeq(links)) return
+  links.items.splice(index, 1)
+  if (links.items.length === 0) {
+    const map = doc.getIn(objective, true)
+    if (isMap(map)) {
+      map.items = map.items.filter((pair) => keyOf(pair) !== 'links')
+    }
+  }
+}
+
+/** Add a progress note at the top of the list, where the newest one belongs. */
+export function addProgressNote(
+  doc: Document,
+  keyResult: Path,
+  date: string,
+  note: string,
+): void {
+  const notesPath = [...keyResult, 'progress_notes']
+  let notes = doc.getIn(notesPath, true)
+
+  if (!isSeq(notes)) {
+    notes = new YAMLSeq()
+    const map = doc.getIn(keyResult, true)
+    if (!isMap(map)) return
+    insertOrdered(map, 'progress_notes', notes as YAMLSeq, KR_KEYS)
+  }
+
+  const entry = doc.createNode({ date, note })
+  ;(notes as YAMLSeq).items.unshift(entry)
+}
+
+function insertOrdered(
+  map: YAMLMap,
+  key: string,
+  value: unknown,
+  order: readonly string[],
+): void {
+  const target = order.indexOf(key)
+  let insertAt = map.items.length
+  for (const [index, pair] of map.items.entries()) {
+    if (order.indexOf(keyOf(pair)) > target) {
+      insertAt = index
+      break
+    }
+  }
+  map.items.splice(insertAt, 0, new Pair(new Scalar(key), value))
+}
+
+/**
+ * The next free identifier in a list. Numbering continues past whatever is
+ * there, so an aborted `KR2` is never reissued.
+ */
+function nextIdentifier(list: YAMLSeq, prefix: string): string {
+  let highest = 0
+  for (const item of list.items) {
+    if (!isMap(item)) continue
+    const id = item.get('id')
+    const found = typeof id === 'string' ? id.match(/(\d+)$/) : null
+    if (found) highest = Math.max(highest, Number(found[1]))
+  }
+  return `${prefix}${highest + 1}`
+}
+
+function blankKeyResult(doc: Document, id: string) {
+  // Required fields are left empty on purpose: the validation panel then names
+  // exactly what still needs filling in.
+  return doc.createNode({
+    id,
+    target_measure: '',
+    target_date: '',
+    owners: { accountable: [] },
+    status: 'Not Started',
+    priority: 'Medium',
+    complexity: 'Medium',
+  })
+}
+
+export function addKeyResult(doc: Document, objective: Path): void {
+  const list = doc.getIn([...objective, 'key_results'], true)
+  if (!isSeq(list)) return
+  list.items.push(blankKeyResult(doc, nextIdentifier(list, 'KR')))
+}
+
+export function addObjective(doc: Document, initiative: Path): void {
+  const list = doc.getIn([...initiative, 'objectives'], true)
+  if (!isSeq(list)) return
+  const id = nextIdentifier(list, 'O')
+  const objective = doc.createNode({
+    id,
+    title: '',
+    status: 'Not Started',
+    key_results: [],
+  })
+  const keyResults = objective.get('key_results', true)
+  if (isSeq(keyResults)) keyResults.items.push(blankKeyResult(doc, 'KR1'))
+  list.items.push(objective)
+}
+
+export function addInitiative(
+  doc: Document,
+  id: string,
+  title: string,
+  timeframe: string,
+): void {
+  const list = doc.getIn(['strategic_initiatives'], true)
+  if (!isSeq(list)) return
+  const initiative = doc.createNode({
+    id: id.trim().toUpperCase(),
+    title: title.trim(),
+    owner: '',
+    timeframe: timeframe.trim(),
+    status: 'Not Started',
+    objectives: [],
+  })
+  const objectives = initiative.get('objectives', true)
+  if (isSeq(objectives)) {
+    const objective = doc.createNode({
+      id: 'O1',
+      title: '',
+      status: 'Not Started',
+      key_results: [],
+    })
+    const keyResults = objective.get('key_results', true)
+    if (isSeq(keyResults)) keyResults.items.push(blankKeyResult(doc, 'KR1'))
+    objectives.items.push(objective)
+  }
+  list.items.push(initiative)
+}
+
+export const FIELD_ORDER = {
+  initiative: SI_KEYS,
+  objective: OBJECTIVE_KEYS,
+  keyResult: KR_KEYS,
+} as const

@@ -55,7 +55,13 @@ const OBJECTIVE_ID = /^O[0-9]+$/
 const KR_ID = /^KR[0-9]+$/
 
 const FILE_KEYS = ['version', 'strategic_initiatives'] as const
-const SI_KEYS = [
+
+/**
+ * The allowed fields at each level, in the order SPEC.md documents them. An
+ * editor adding a field should insert it at this position rather than at the
+ * end of the mapping.
+ */
+export const SI_KEYS = [
   'id',
   'title',
   'owner',
@@ -65,7 +71,7 @@ const SI_KEYS = [
   'description',
   'objectives',
 ] as const
-const OBJECTIVE_KEYS = [
+export const OBJECTIVE_KEYS = [
   'id',
   'title',
   'description',
@@ -75,7 +81,7 @@ const OBJECTIVE_KEYS = [
   'links',
   'key_results',
 ] as const
-const KR_KEYS = [
+export const KR_KEYS = [
   'id',
   'target_measure',
   'target_date',

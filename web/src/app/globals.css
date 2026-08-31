@@ -1,0 +1,64 @@
+@import 'tailwindcss';
+
+/*
+ * Dark by default. One neutral scale plus a single green accent — the palette
+ * stays out of the way so status colour carries meaning.
+ */
+@theme {
+  --color-canvas: oklch(0.16 0.006 260);
+  --color-surface: oklch(0.2 0.007 260);
+  --color-surface-raised: oklch(0.24 0.008 260);
+  --color-line: oklch(0.31 0.009 260);
+  --color-ink: oklch(0.95 0.004 260);
+  --color-ink-muted: oklch(0.68 0.008 260);
+  --color-ink-faint: oklch(0.54 0.008 260);
+
+  --color-accent: oklch(0.72 0.15 155);
+  --color-accent-dim: oklch(0.45 0.09 155);
+
+  --color-warn: oklch(0.79 0.13 78);
+  --color-done: oklch(0.72 0.15 155);
+  --color-active: oklch(0.75 0.13 230);
+  --color-idle: oklch(0.6 0.01 260);
+  --color-dropped: oklch(0.62 0.13 25);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Fields look like text until you interact with them. */
+.field {
+  background-color: transparent;
+  border-radius: 0.375rem;
+  border: 1px solid transparent;
+  padding: 0.125rem 0.375rem;
+  margin-left: -0.375rem;
+  width: 100%;
+  transition: background-color 120ms, border-color 120ms;
+}
+
+.field:hover {
+  background-color: var(--color-surface-raised);
+}
+
+.field:focus {
+  outline: none;
+  background-color: var(--color-canvas);
+  border-color: var(--color-accent-dim);
+}
+
+.field::placeholder {
+  color: var(--color-ink-faint);
+  font-style: italic;
+}
