@@ -1,9 +1,14 @@
 /**
  * Opening and saving files from the browser, with no server involved.
  *
- * Chrome and Edge support the File System Access API, which writes back to the
- * file you opened — a real Save. Safari and Firefox do not, so there we fall
- * back to a file input for opening and a download for saving.
+ * Chrome and Edge implement the File System Access API, which writes back to
+ * the file you opened — a real Save. Safari and Firefox have no such API, and
+ * some Chromium builds (Brave and Arc, for instance) expose it but refuse to
+ * let it run.
+ *
+ * So the API is treated as an optimisation that may fail at any point, never as
+ * something to rely on. Every path here degrades to the plain file input and a
+ * download rather than surfacing an exception.
  */
 
 export interface OpenedFile {
@@ -12,8 +17,21 @@ export interface OpenedFile {
   handle: FileSystemFileHandle | null
 }
 
+/** What happened when we asked the browser for a file. */
+export type OpenOutcome =
+  | { kind: 'opened'; file: OpenedFile }
+  | { kind: 'cancelled' }
+  /** Use an `<input type="file">` instead. `reason` is set when worth saying. */
+  | { kind: 'fallback'; reason?: string }
+
 interface PickerWindow {
   showOpenFilePicker?: (options?: unknown) => Promise<FileSystemFileHandle[]>
+}
+
+/** The permission methods, which are not in every lib.dom yet. */
+type Permissioned = FileSystemFileHandle & {
+  queryPermission?: (descriptor: { mode: string }) => Promise<PermissionState>
+  requestPermission?: (descriptor: { mode: string }) => Promise<PermissionState>
 }
 
 const YAML_TYPES = [
@@ -23,7 +41,7 @@ const YAML_TYPES = [
   },
 ]
 
-/** True when the browser can write back to the file that was opened. */
+/** True when the browser claims it can write back to the file it opened. */
 export function canSaveInPlace(): boolean {
   return (
     typeof window !== 'undefined' &&
@@ -32,23 +50,70 @@ export function canSaveInPlace(): boolean {
 }
 
 /**
- * Open a file through the picker. Returns null when the browser has no picker
- * (the caller shows a file input instead) or when the user cancels.
+ * Ask for permission on a handle.
+ *
+ * Picking a file usually grants read access implicitly, but not always — and
+ * writing needs asking for explicitly. Older browsers have no permission
+ * methods at all, in which case we assume the handle works and find out when
+ * we use it.
  */
-export async function openWithPicker(): Promise<OpenedFile | null> {
+async function allowed(handle: FileSystemFileHandle, mode: string): Promise<boolean> {
+  const permissioned = handle as Permissioned
+  if (typeof permissioned.queryPermission !== 'function') return true
+  try {
+    if ((await permissioned.queryPermission({ mode })) === 'granted') return true
+    if (typeof permissioned.requestPermission !== 'function') return false
+    return (await permissioned.requestPermission({ mode })) === 'granted'
+  } catch {
+    return false
+  }
+}
+
+/** Open a file through the browser's picker. */
+export async function openWithPicker(): Promise<OpenOutcome> {
   const picker = (window as PickerWindow).showOpenFilePicker
-  if (typeof picker !== 'function') return null
+  if (typeof picker !== 'function') return { kind: 'fallback' }
+
+  let handle: FileSystemFileHandle | undefined
+  try {
+    ;[handle] = await picker({ types: YAML_TYPES, multiple: false })
+  } catch (error) {
+    // Dismissing the picker is not a failure worth reporting.
+    if (isAbort(error)) return { kind: 'cancelled' }
+    return { kind: 'fallback', reason: describeRefusal(error) }
+  }
+  if (!handle) return { kind: 'cancelled' }
+
+  if (!(await allowed(handle, 'read'))) {
+    return {
+      kind: 'fallback',
+      reason: 'This browser would not grant read access to that file.',
+    }
+  }
 
   try {
-    const [handle] = await picker({ types: YAML_TYPES, multiple: false })
-    if (!handle) return null
     const file = await handle.getFile()
-    return { name: file.name, text: await file.text(), handle }
+    return { kind: 'opened', file: { name: file.name, text: await file.text(), handle } }
   } catch (error) {
-    // The user dismissing the picker is not an error worth reporting.
-    if ((error as Error).name === 'AbortError') return null
-    throw error
+    if (isAbort(error)) return { kind: 'cancelled' }
+    return { kind: 'fallback', reason: describeRefusal(error) }
   }
+}
+
+function isAbort(error: unknown): boolean {
+  return (error as Error | undefined)?.name === 'AbortError'
+}
+
+function describeRefusal(error: unknown): string {
+  const name = (error as Error | undefined)?.name
+  if (name === 'NotAllowedError' || name === 'SecurityError') {
+    return (
+      'This browser blocked direct file access, so opening falls back to a ' +
+      'copy and saving will download. Brave and Arc block it by default; ' +
+      'plain Chrome or Edge can save in place.'
+    )
+  }
+  return `Could not open that file directly (${name ?? 'unknown error'}).`
 }
 
 /** Read a file chosen through an `<input type="file">`. */
@@ -56,18 +121,36 @@ export async function readFromInput(file: File): Promise<OpenedFile> {
   return { name: file.name, text: await file.text(), handle: null }
 }
 
-export type SaveOutcome = 'saved' | 'downloaded'
+export type SaveOutcome =
+  | { kind: 'saved' }
+  /** Written as a download instead. `reason` is set if in-place saving failed. */
+  | { kind: 'downloaded'; reason?: string }
 
 /** Write back to the opened file, or download a copy if that is not possible. */
 export async function save(file: OpenedFile, text: string): Promise<SaveOutcome> {
-  if (file.handle) {
+  if (!file.handle) {
+    download(file.name, text)
+    return { kind: 'downloaded' }
+  }
+
+  if (!(await allowed(file.handle, 'readwrite'))) {
+    download(file.name, text)
+    return {
+      kind: 'downloaded',
+      reason: 'This browser would not grant permission to write that file.',
+    }
+  }
+
+  try {
     const writable = await file.handle.createWritable()
     await writable.write(text)
     await writable.close()
-    return 'saved'
+    return { kind: 'saved' }
+  } catch (error) {
+    // Never lose the edit because writing in place failed.
+    download(file.name, text)
+    return { kind: 'downloaded', reason: describeRefusal(error) }
   }
-  download(file.name, text)
-  return 'downloaded'
 }
 
 export function download(name: string, text: string): void {

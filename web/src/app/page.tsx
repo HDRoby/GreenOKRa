@@ -120,12 +120,16 @@ export default function Page() {
   )
 
   const openFile = useCallback(async () => {
-    const opened = await openWithPicker()
-    if (opened) {
-      load(opened)
-    } else if (!canSaveInPlace()) {
-      fileInput.current?.click()
+    const outcome = await openWithPicker()
+    if (outcome.kind === 'opened') {
+      load(outcome.file)
+      return
     }
+    if (outcome.kind === 'cancelled') return
+    // The browser has no picker, or refused to use it. Either way there is
+    // always the plain file input to fall back on.
+    if (outcome.reason) setMessage(outcome.reason)
+    fileInput.current?.click()
   }, [load])
 
   const loadExample = useCallback(async () => {
@@ -141,10 +145,14 @@ export default function Page() {
     setData(toData(doc))
     const outcome = await save(file, stringify(doc))
     setDirty(false)
+    if (outcome.kind === 'saved') {
+      setMessage(`Saved ${file.name}`)
+      return
+    }
     setMessage(
-      outcome === 'saved'
-        ? `Saved ${file.name}`
-        : `Downloaded ${file.name} — your browser cannot write files in place`,
+      outcome.reason
+        ? `Downloaded ${file.name} instead. ${outcome.reason}`
+        : `Downloaded ${file.name} — this browser cannot write files in place.`,
     )
   }, [file])
 
