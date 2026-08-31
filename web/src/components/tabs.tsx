@@ -3,6 +3,12 @@
 import { Plus, X } from 'lucide-react'
 import { useState } from 'react'
 
+import {
+  type Indexed,
+  type PersonFilter,
+  ownsInitiative,
+  visibleObjectives,
+} from '@/lib/filter.ts'
 import { type Initiative, formatProgress, initiativeProgress } from '@/lib/okr.ts'
 
 /**
@@ -12,11 +18,15 @@ import { type Initiative, formatProgress, initiativeProgress } from '@/lib/okr.t
 export function InitiativeTabs({
   initiatives,
   active,
+  person,
   onSelect,
   onAdd,
 }: {
-  initiatives: Initiative[]
+  /** Carrying their true positions, which may not be contiguous when filtered. */
+  initiatives: Indexed<Initiative>[]
   active: number
+  /** So the objective count matches what opening the tab will actually show. */
+  person: PersonFilter
   onSelect: (index: number) => void
   onAdd: (id: string, title: string, timeframe: string) => void
 }) {
@@ -29,14 +39,27 @@ export function InitiativeTabs({
         aria-label="Strategic initiatives"
         className="flex items-stretch gap-1 overflow-x-auto border-b border-line"
       >
-        {initiatives.map((initiative, index) => {
+        {initiatives.map(({ item: initiative, index }) => {
           const selected = index === active
+          // Count what the tab will actually show, not the whole initiative,
+          // so the badge does not promise objectives the filter has hidden.
+          const objectives = visibleObjectives(
+            initiative.objectives ?? [],
+            person,
+            ownsInitiative(initiative, person),
+          ).length
+
           return (
             <button
               key={initiative.id ?? index}
               role="tab"
               aria-selected={selected}
               onClick={() => onSelect(index)}
+              // The id is dropped from the label to keep it short, but stays
+              // reachable on hover — it is what tickets and notes refer to.
+              title={`${initiative.id ?? '?'} — ${objectives} ${
+                objectives === 1 ? 'objective' : 'objectives'
+              }`}
               className={`flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm
                 transition-colors
                 ${
@@ -45,11 +68,20 @@ export function InitiativeTabs({
                     : 'border-transparent text-ink-muted hover:border-line hover:text-ink'
                 }`}
             >
-              <span className="font-mono text-[10px] text-ink-faint">
-                {initiative.id ?? '?'}
-              </span>
               <span className={selected ? 'font-medium' : ''}>
                 {initiative.title || 'Untitled'}
+              </span>
+              <span
+                aria-label={`${objectives} objectives`}
+                className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full
+                  px-1.5 text-[11px] tabular-nums
+                  ${
+                    selected
+                      ? 'bg-accent-dim/35 text-ink'
+                      : 'bg-surface-raised text-ink-faint'
+                  }`}
+              >
+                {objectives}
               </span>
               <span className="tabular-nums text-xs text-ink-faint">
                 {formatProgress(initiativeProgress(initiative))}

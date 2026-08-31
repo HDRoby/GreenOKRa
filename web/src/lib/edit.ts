@@ -216,6 +216,54 @@ export function addProgressNote(
 
   const entry = doc.createNode({ date, note })
   ;(notes as YAMLSeq).items.unshift(entry)
+  sortNewestFirst(notes as YAMLSeq)
+}
+
+/** The fields of a progress note, in the order SPEC.md documents them. */
+const NOTE_KEYS = ['date', 'note'] as const
+
+/** Edit one field of an existing note. */
+export function setNoteField(
+  doc: Document,
+  keyResult: Path,
+  index: number,
+  key: 'date' | 'note',
+  value: string,
+): void {
+  const notes = doc.getIn([...keyResult, 'progress_notes'], true)
+  if (!isSeq(notes) || !isMap(notes.items[index])) return
+  setField(doc, [...keyResult, 'progress_notes', index], key, value, NOTE_KEYS)
+}
+
+/**
+ * Re-sort the log, for after a note has been re-dated.
+ *
+ * Kept separate from the edit itself so the list does not rearrange under the
+ * cursor while a date is still being chosen.
+ */
+export function sortNotes(doc: Document, keyResult: Path): void {
+  const notes = doc.getIn([...keyResult, 'progress_notes'], true)
+  if (isSeq(notes)) sortNewestFirst(notes)
+}
+
+/** A note's date as `YYYY-MM-DD`, which sorts correctly as text. */
+function noteDate(item: unknown): string {
+  if (!isMap(item)) return ''
+  const value = item.get('date')
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/**
+ * Reorder the log newest first, the order SPEC.md asks for.
+ *
+ * A note can be entered against any date, not only today, so the list is
+ * sorted after every insertion rather than assuming the newest arrival is the
+ * most recent. The sort is stable, so a note sharing a date with an existing
+ * one stays on top of it — it was written later.
+ */
+function sortNewestFirst(notes: YAMLSeq): void {
+  notes.items.sort((left, right) => noteDate(right).localeCompare(noteDate(left)))
 }
 
 function insertOrdered(

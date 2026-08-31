@@ -122,15 +122,16 @@ choices, because only those are decisions. Either can be undone.
 Everything is validated as you type, and the counter in the header opens a panel
 listing errors, warnings and anything that was tidied.
 
-### Two deliberate omissions
+### One deliberate omission
 
-**You cannot delete anything.** Ids must stay stable — a ticket referencing
-`TEK.O1.KR2` should still resolve next year. Dropped work is set to `Aborted`,
-which excludes it from progress while keeping its id. Numbering never reuses a
-retired id either: abort `KR2` and the next key result is `KR3`.
+**You cannot delete an initiative, objective or key result.** Ids must stay
+stable — a ticket referencing `TEK.O1.KR2` should still resolve next year.
+Dropped work is set to `Aborted`, which excludes it from progress while keeping
+its id. Numbering never reuses a retired id either: abort `KR2` and the next key
+result is `KR3`.
 
-**Existing progress notes are read-only.** The log is append-only by design; new
-notes go on top.
+Progress notes are ordinary editable fields. Re-dating one re-sorts the log, so
+it stays newest-first.
 
 ### Saving in place
 

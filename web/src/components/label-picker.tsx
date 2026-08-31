@@ -27,6 +27,7 @@ export function LabelPicker({
   clearable = false,
   label,
   placeholder = '(not set)',
+  highlight,
   onChange,
 }: {
   values: string[]
@@ -35,6 +36,8 @@ export function LabelPicker({
   clearable?: boolean
   label: string
   placeholder?: string
+  /** Filled in solid, to pick this value out of a page of others. */
+  highlight?: string | null
   onChange: (values: string[]) => void
 }) {
   const [mode, setMode] = useState<'idle' | 'pick' | 'new'>('idle')
@@ -58,7 +61,7 @@ export function LabelPicker({
       {values.map((value) => (
         <span
           key={value}
-          style={labelTint(value)}
+          style={labelTint(value, value === highlight)}
           onClick={multiple ? undefined : start}
           title={multiple ? value : `${value} — click to change`}
           className={`group inline-flex items-center gap-1 rounded-full border px-2 py-0.5

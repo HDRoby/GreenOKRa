@@ -19,6 +19,9 @@ export interface Editor {
   setObjectiveOwners(objective: Path, names: string[]): void
 
   addNote(keyResult: Path, date: string, note: string): void
+  setNote(keyResult: Path, index: number, key: 'date' | 'note', value: string): void
+  /** Re-order the log after a note has been re-dated. */
+  sortNotes(keyResult: Path): void
   addKeyResult(objective: Path): void
   addObjective(initiative: Path): void
   addInitiative(id: string, title: string, timeframe: string): void

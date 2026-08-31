@@ -8,6 +8,7 @@ import type { Document } from 'yaml'
 import { InitiativeCard } from '@/components/initiative.tsx'
 import type { Editor } from '@/components/editor.ts'
 import { ReportPanel } from '@/components/report-panel.tsx'
+import { PersonFilterSelect } from '@/components/person-filter.tsx'
 import { InitiativeTabs } from '@/components/tabs.tsx'
 import {
   type Path,
@@ -20,10 +21,18 @@ import {
   removeLink,
   setField,
   setNumberField,
+  setNoteField,
   setObjectiveOwners,
   setOptionalField,
   setOwners,
+  sortNotes,
 } from '@/lib/edit.ts'
+import {
+  EVERYONE,
+  type PersonFilter,
+  filterablePeople,
+  visibleInitiatives,
+} from '@/lib/filter.ts'
 import { collectPools } from '@/lib/labels.ts'
 import {
   type OpenedFile,
@@ -56,6 +65,7 @@ export default function Page() {
   const [dirty, setDirty] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [tab, setTab] = useState(0)
+  const [person, setPerson] = useState<PersonFilter>(EVERYONE)
   // Resolved after mount, never during render: the server has no `window`, so
   // asking it there and in the browser gives different answers and the
   // hydrated markup no longer matches. Null means "not known yet".
@@ -85,6 +95,7 @@ export default function Page() {
         : null,
     )
     setTab(0)
+    setPerson(EVERYONE)
   }, [])
 
   const commit = useCallback((mutate: (doc: Document) => void) => {
@@ -127,6 +138,9 @@ export default function Page() {
 
       addNote: (path, date, note) =>
         commit((doc) => addProgressNote(doc, path, date, note)),
+      setNote: (path, index, key, value) =>
+        commit((doc) => setNoteField(doc, path, index, key, value)),
+      sortNotes: (path) => commit((doc) => sortNotes(doc, path)),
       addKeyResult: (path) => commit((doc) => addKeyResult(doc, path)),
       addObjective: (path) => commit((doc) => addObjective(doc, path)),
       addInitiative: (id, title, timeframe) =>
@@ -196,11 +210,16 @@ export default function Page() {
   }, [dirty])
 
   const initiatives = data?.strategic_initiatives ?? []
-  // Clamp: loading a shorter file must not leave the tab pointing past the end.
-  const active = Math.min(tab, Math.max(initiatives.length - 1, 0))
-  const current = initiatives[active]
   // Pickers offer the values already in the file, so spellings stay stable.
   const pools = collectPools(data)
+  // Filtering keeps true indices, since edits are addressed by index.
+  const visible = visibleInitiatives(initiatives, person)
+  // Fall back to the first visible tab when the current one is filtered away
+  // or a shorter file has been loaded.
+  const active = visible.some(({ index }) => index === tab)
+    ? tab
+    : (visible[0]?.index ?? 0)
+  const current = visible.find(({ index }) => index === active)?.item
 
   return (
     <div className={`mx-auto min-h-screen max-w-5xl px-6 pb-24 ${data ? '' : 'pt-6'}`}>
@@ -211,6 +230,9 @@ export default function Page() {
           file={file}
           dirty={dirty}
           report={report}
+          people={filterablePeople(data)}
+          person={person}
+          onPerson={setPerson}
           onOpen={openFile}
           onSave={saveFile}
         />
@@ -239,11 +261,14 @@ export default function Page() {
       ) : (
         <main>
           <InitiativeTabs
-            initiatives={initiatives}
+            initiatives={visible}
             active={active}
+            person={person}
             onSelect={setTab}
             onAdd={(id, title, timeframe) => {
               editor.addInitiative(id, title, timeframe)
+              // A new initiative names nobody yet, so a filter would hide it.
+              setPerson(EVERYONE)
               setTab(initiatives.length) // show what was just created
             }}
           />
@@ -252,8 +277,13 @@ export default function Page() {
               initiative={current}
               index={active}
               pools={pools}
+              person={person}
               editor={editor}
             />
+          ) : person !== EVERYONE ? (
+            <p className="mt-16 text-center text-sm text-ink-muted">
+              Nothing in this file involves {person}.
+            </p>
           ) : (
             <p className="mt-16 text-center text-sm text-ink-muted">
               This file has no strategic initiatives yet. Add one above.
@@ -276,7 +306,7 @@ function EmptyState({
 }) {
   return (
     <div className="flex min-h-[85vh] flex-col items-center justify-center gap-6 text-center">
-      <Image src="/logo.png" alt="GreenOKRa" width={220} height={129} priority />
+      <Image src="/logo.png" alt="GreenOKR" width={220} height={129} priority />
       <div>
         <h2 className="text-lg font-medium">No file open</h2>
         <p className="mt-1 max-w-md text-sm text-ink-muted">
@@ -317,57 +347,69 @@ function EditorHeader({
   file,
   dirty,
   report,
+  people,
+  person,
+  onPerson,
   onOpen,
   onSave,
 }: {
   file: OpenedFile | null
   dirty: boolean
   report: Report | null
+  people: string[]
+  person: PersonFilter
+  onPerson: (person: PersonFilter) => void
   onOpen: () => void
   onSave: () => void
 }) {
   return (
     <header
-      className="sticky top-0 z-10 -mx-6 mb-6 flex items-center gap-4 border-b
-        border-line bg-canvas/90 px-6 py-3 backdrop-blur"
+      className="sticky top-0 z-10 -mx-6 mb-6 border-b border-line bg-canvas/90
+        px-6 py-3 backdrop-blur"
     >
-      <Image src="/logo-mark.png" alt="" width={26} height={22} priority className="shrink-0" />
-      <h1 className="shrink-0 font-semibold">GreenOKRa</h1>
+      <div className="flex items-center gap-4">
+        <Image src="/logo-mark.png" alt="" width={26} height={22} priority className="shrink-0" />
+        <h1 className="shrink-0 font-semibold">GreenOKR</h1>
 
-      {file && (
-        <span className="flex min-w-0 items-center gap-1.5 text-sm text-ink-muted">
-          <span className="truncate font-mono">{file.name}</span>
-          {dirty && (
-            <span
-              title="Unsaved changes"
-              className="size-1.5 shrink-0 rounded-full bg-warn"
-            />
-          )}
-        </span>
-      )}
-
-      <div className="ml-auto flex shrink-0 items-center gap-2">
-        {report && <ReportPanel report={report} />}
-        <button
-          type="button"
-          onClick={onOpen}
-          className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1
-            text-xs hover:border-ink-faint"
-        >
-          <FolderOpen size={13} />
-          Open
-        </button>
         {file && (
+          <span className="flex min-w-0 items-center gap-1.5 text-sm text-ink-muted">
+            <span className="truncate font-mono">{file.name}</span>
+            {dirty && (
+              <span
+                title="Unsaved changes"
+                className="size-1.5 shrink-0 rounded-full bg-warn"
+              />
+            )}
+          </span>
+        )}
+
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {report && <ReportPanel report={report} />}
           <button
             type="button"
-            onClick={onSave}
-            className="flex items-center gap-1.5 rounded-md border border-accent-dim
-              bg-accent-dim/20 px-2.5 py-1 text-xs text-ink hover:bg-accent-dim/35"
+            onClick={onOpen}
+            className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1
+              text-xs hover:border-ink-faint"
           >
-            {file.handle ? <Save size={13} /> : <FileDown size={13} />}
-            {file.handle ? 'Save' : 'Download'}
+            <FolderOpen size={13} />
+            Open
           </button>
-        )}
+          {file && (
+            <button
+              type="button"
+              onClick={onSave}
+              className="flex items-center gap-1.5 rounded-md border border-accent-dim
+                bg-accent-dim/20 px-2.5 py-1 text-xs text-ink hover:bg-accent-dim/35"
+            >
+              {file.handle ? <Save size={13} /> : <FileDown size={13} />}
+              {file.handle ? 'Save' : 'Download'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-2">
+        <PersonFilterSelect people={people} person={person} onChange={onPerson} />
       </div>
     </header>
   )

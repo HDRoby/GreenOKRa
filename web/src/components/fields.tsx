@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { timeframeGroups } from '@/lib/dates.ts'
@@ -272,6 +272,31 @@ export function ProgressBar({
         {formatProgress(progress)}
       </span>
     </div>
+  )
+}
+
+/**
+ * The one way to add something, used at every level.
+ *
+ * A single component rather than four similar buttons, so the styling and
+ * alignment cannot drift apart again.
+ */
+export function AddButton({
+  label,
+  onClick,
+}: {
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-1 text-xs text-ink-faint hover:text-accent"
+    >
+      <Plus size={12} />
+      {label}
+    </button>
   )
 }
 

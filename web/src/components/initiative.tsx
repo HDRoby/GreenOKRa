@@ -1,13 +1,17 @@
 'use client'
 
-import { Plus } from 'lucide-react'
-
 import { initiativePath, statusOptions } from '@/lib/edit.ts'
+import {
+  type PersonFilter,
+  ownsInitiative,
+  visibleObjectives,
+} from '@/lib/filter.ts'
 import type { Pools } from '@/lib/labels.ts'
 import { type Initiative, initiativeProgress } from '@/lib/okr.ts'
 
 import type { Editor } from './editor.ts'
 import {
+  AddButton,
   EnumSelect,
   ProgressBar,
   Reference,
@@ -22,16 +26,20 @@ export function InitiativeCard({
   initiative,
   index,
   pools,
+  person,
   editor,
 }: {
   initiative: Initiative
   index: number
   pools: Pools
+  person: PersonFilter
   editor: Editor
 }) {
   const path = initiativePath(index)
   const id = initiative.id ?? '?'
-  const objectives = initiative.objectives ?? []
+  // Owning the initiative makes everything under it relevant.
+  const revealsAll = ownsInitiative(initiative, person)
+  const objectives = visibleObjectives(initiative.objectives ?? [], person, revealsAll)
 
   return (
     <article className="space-y-4">
@@ -75,6 +83,7 @@ export function InitiativeCard({
               known={pools.people}
               multiple={false}
               label={`${id} owner`}
+              highlight={person}
               onChange={(names) =>
                 editor.setInitiative(path, 'owner', names[0] ?? '')
               }
@@ -100,7 +109,7 @@ export function InitiativeCard({
       </header>
 
       <div className="space-y-3">
-        {objectives.map((objective, objectiveIndex) => (
+        {objectives.map(({ item: objective, index: objectiveIndex }) => (
           <ObjectiveCard
             key={objective.id ?? objectiveIndex}
             objective={objective}
@@ -109,17 +118,12 @@ export function InitiativeCard({
             objectiveIndex={objectiveIndex}
             timeframe={initiative.timeframe}
             pools={pools}
+            person={person}
+            inherited={revealsAll}
             editor={editor}
           />
         ))}
-        <button
-          type="button"
-          onClick={() => editor.addObjective(path)}
-          className="flex items-center gap-1 text-xs text-ink-faint hover:text-accent"
-        >
-          <Plus size={12} />
-          Objective
-        </button>
+        <AddButton label="Objective" onClick={() => editor.addObjective(path)} />
       </div>
     </article>
   )

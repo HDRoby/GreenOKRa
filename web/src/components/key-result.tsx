@@ -1,9 +1,10 @@
 'use client'
 
-import { ChevronRight, Flag, Layers, MessageSquare, Plus } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronRight, Flag, Layers, MessageSquare } from 'lucide-react'
+import { Fragment, useState } from 'react'
 
 import { resolveDate } from '@/lib/dates.ts'
+import type { PersonFilter } from '@/lib/filter.ts'
 import type { Path } from '@/lib/edit.ts'
 import { today } from '@/lib/file-access.ts'
 import {
@@ -17,6 +18,7 @@ import {
 
 import type { Editor } from './editor.ts'
 import {
+  AddButton,
   EnumSelect,
   PercentSelect,
   ProgressBar,
@@ -42,6 +44,7 @@ export function KeyResultRow({
   path,
   timeframe,
   people,
+  person,
   editor,
 }: {
   keyResult: KeyResult
@@ -49,6 +52,7 @@ export function KeyResultRow({
   path: Path
   timeframe: string | undefined
   people: string[]
+  person: PersonFilter
   editor: Editor
 }) {
   const measure = keyResult.target_measure ?? ''
@@ -174,6 +178,7 @@ export function KeyResultRow({
                   known={people}
                   multiple={!SINGLE_ROLES.has(role)}
                   label={`${reference} ${role}`}
+                  highlight={person}
                   onChange={(names) => editor.setOwners(path, role, names)}
                 />
               </div>
@@ -188,8 +193,13 @@ export function KeyResultRow({
 }
 
 /**
- * Existing notes are read-only by design: SPEC.md says never edit or delete an
- * entry, only add a newer one on top.
+ * The review log: a date column and the note beside it.
+ *
+ * Entries are editable like any other field. Re-dating one re-sorts the log,
+ * but only once the date input is left, so the row does not move out from under
+ * the cursor mid-edit. Adding follows the same shape as every other add in the
+ * editor: an always-enabled button that opens a draft row, here at the top
+ * where the newest note belongs.
  */
 function NotesPanel({
   notes,
@@ -200,68 +210,75 @@ function NotesPanel({
   path: Path
   editor: Editor
 }) {
-  const [date, setDate] = useState(today())
-  const [text, setText] = useState('')
+  const [draft, setDraft] = useState<{ date: string; text: string } | null>(null)
 
-  const add = () => {
-    if (!text.trim()) return
-    editor.addNote(path, date, text.trim())
-    setText('')
-    setDate(today())
+  const finish = () => {
+    if (draft && draft.text.trim()) {
+      // The list re-sorts by date, so a backdated note lands in the right place.
+      editor.addNote(path, draft.date, draft.text.trim())
+    }
+    setDraft(null)
   }
 
   return (
-    <div className="space-y-3">
-      {notes.length > 0 && (
-        <div className="space-y-2 border-l border-line pl-4">
+    <div className="space-y-2">
+      <AddButton label="Note" onClick={() => setDraft({ date: today(), text: '' })} />
+
+      {(draft || notes.length > 0) && (
+        <div className="grid grid-cols-[7.5rem_1fr] items-start gap-x-3 gap-y-2 text-xs">
+          {draft && (
+            <>
+              <input
+                type="date"
+                value={draft.date}
+                aria-label="Note date"
+                onChange={(event) =>
+                  setDraft({ ...draft, date: event.target.value })
+                }
+                className="field font-mono text-ink-muted"
+              />
+              <textarea
+                autoFocus
+                rows={2}
+                value={draft.text}
+                placeholder="What changed since the last review?"
+                aria-label="Note"
+                onChange={(event) => setDraft({ ...draft, text: event.target.value })}
+                onBlur={finish}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                    finish()
+                  }
+                  if (event.key === 'Escape') setDraft(null)
+                }}
+                className="field resize-y leading-relaxed"
+              />
+            </>
+          )}
+
           {notes.map((note, index) => (
-            <div key={`${note.date}-${index}`} className="text-xs">
-              <span className="font-mono text-ink-faint">{note.date}</span>
-              <p className="mt-0.5 leading-relaxed text-ink-muted">{note.note}</p>
-            </div>
+            <Fragment key={`${note.date}-${index}`}>
+              <input
+                type="date"
+                value={note.date ?? ''}
+                aria-label={`Date of note ${index + 1}`}
+                onChange={(event) =>
+                  editor.setNote(path, index, 'date', event.target.value)
+                }
+                onBlur={() => editor.sortNotes(path)}
+                className="field font-mono text-ink-faint"
+              />
+              <TextField
+                multiline
+                value={note.note ?? ''}
+                placeholder="What changed"
+                onCommit={(value) => editor.setNote(path, index, 'note', value)}
+                className="leading-relaxed text-ink-muted"
+              />
+            </Fragment>
           ))}
         </div>
       )}
-
-      {/* The entry form sits at the same left edge as the measure and the
-          description above it, so the text area is the same width as every
-          other block of prose in the editor. */}
-      <div className="space-y-1.5">
-        <label className="flex items-center gap-2 text-xs text-ink-faint">
-          note dated
-          <input
-            type="date"
-            value={date}
-            aria-label="Note date"
-            onChange={(event) => setDate(event.target.value)}
-            className="field w-36 font-mono text-xs text-ink-muted"
-          />
-        </label>
-        <textarea
-          rows={2}
-          value={text}
-          placeholder="What changed since the last review?"
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) add()
-          }}
-          className="field resize-y text-xs leading-relaxed"
-        />
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={add}
-            disabled={!text.trim()}
-            title="Add note (⌘↩)"
-            className="flex items-center gap-1 rounded border border-line px-2 py-1
-              text-xs text-ink-muted enabled:hover:border-accent-dim
-              enabled:hover:text-ink disabled:opacity-40"
-          >
-            <Plus size={12} />
-            Add note
-          </button>
-        </div>
-      </div>
     </div>
   )
 }

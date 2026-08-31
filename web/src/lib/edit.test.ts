@@ -10,10 +10,12 @@ import {
   objectivePath,
   removeLink,
   setField,
+  setNoteField,
   setNumberField,
   setObjectiveOwners,
   setOptionalField,
   setOwners,
+  sortNotes,
 } from './edit.ts'
 import {
   KR_KEYS,
@@ -188,6 +190,81 @@ describe('progress notes', () => {
     expect(notes?.map((note) => note.date)).toEqual(['2026-08-01', '2026-06-01'])
     // Most-recent-first is what the validator expects, so no warning.
     expect(validate(doc).warnings).toEqual([])
+    expectStillSound(doc)
+  })
+
+  /**
+   * A note can be dated anything, not just today, so the log is re-sorted on
+   * every insertion rather than trusting the newest arrival to be latest.
+   */
+  test('reorders by date when a note is backdated', () => {
+    const doc = parse(BASE)
+    addProgressNote(doc, keyResult, '2026-08-01', 'August.')
+    addProgressNote(doc, keyResult, '2026-06-01', 'Backdated to June.')
+    addProgressNote(doc, keyResult, '2026-07-01', 'Backdated to July.')
+
+    const notes =
+      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results?.[0]
+        ?.progress_notes
+    expect(notes?.map((note) => note.date)).toEqual([
+      '2026-08-01',
+      '2026-07-01',
+      '2026-06-01',
+    ])
+    // Newest first is what the validator wants, so no warning either.
+    expect(validate(doc).warnings).toEqual([])
+  })
+
+  test('puts a note sharing a date on top of the existing one', () => {
+    const doc = parse(BASE)
+    addProgressNote(doc, keyResult, '2026-08-01', 'First written.')
+    addProgressNote(doc, keyResult, '2026-08-01', 'Written later.')
+
+    const notes =
+      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results?.[0]
+        ?.progress_notes
+    expect(notes?.map((note) => note.note)).toEqual([
+      'Written later.',
+      'First written.',
+    ])
+  })
+
+  test('an existing note can be edited', () => {
+    const doc = parse(BASE)
+    addProgressNote(doc, keyResult, '2026-08-01', 'First draft of the note.')
+
+    setNoteField(doc, keyResult, 0, 'note', 'Corrected wording.')
+
+    const notes =
+      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results?.[0]
+        ?.progress_notes
+    expect(notes?.[0]?.note).toBe('Corrected wording.')
+    expect(validate(doc).errors).toEqual([])
+  })
+
+  test('re-dating a note moves it, but only when the log is sorted', () => {
+    const doc = parse(BASE)
+    addProgressNote(doc, keyResult, '2026-08-01', 'August.')
+    addProgressNote(doc, keyResult, '2026-06-01', 'June.')
+
+    const dates = () =>
+      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results?.[0]
+        ?.progress_notes?.map((note) => note.date)
+    expect(dates()).toEqual(['2026-08-01', '2026-06-01'])
+
+    // Backdate the top entry. It stays put while the date is being chosen.
+    setNoteField(doc, keyResult, 0, 'date', '2026-05-01')
+    expect(dates()).toEqual(['2026-05-01', '2026-06-01'])
+
+    sortNotes(doc, keyResult)
+    expect(dates()).toEqual(['2026-06-01', '2026-05-01'])
+    expect(validate(doc).warnings).toEqual([])
+  })
+
+  test('editing a note leaves the rest of the document alone', () => {
+    const doc = parse(BASE)
+    addProgressNote(doc, keyResult, '2026-08-01', 'A note.')
+    setNoteField(doc, keyResult, 0, 'note', 'Edited.')
     expectStillSound(doc)
   })
 

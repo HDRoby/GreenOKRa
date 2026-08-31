@@ -80,9 +80,22 @@ export interface Tint {
   color: string
 }
 
-/** A light tint for a chip: enough colour to tell values apart, no more. */
-export function labelTint(label: string): Tint {
+/**
+ * A light tint for a chip: enough colour to tell values apart, no more.
+ *
+ * `solid` fills the chip with the colour its border normally uses, which is how
+ * the person being filtered on is picked out of a page of other names. Text
+ * flips dark, since the fill is light.
+ */
+export function labelTint(label: string, solid = false): Tint {
   const hue = hueOf(label)
+  if (solid) {
+    return {
+      backgroundColor: `oklch(0.68 0.11 ${hue})`,
+      borderColor: `oklch(0.68 0.11 ${hue})`,
+      color: `oklch(0.2 0.03 ${hue})`,
+    }
+  }
   return {
     backgroundColor: `oklch(0.6 0.08 ${hue} / 0.16)`,
     borderColor: `oklch(0.65 0.1 ${hue} / 0.45)`,

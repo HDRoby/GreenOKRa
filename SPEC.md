@@ -138,8 +138,8 @@ owners:
 
 ### Progress notes
 
-An append-only review log, **most recent first**. Each entry is a `date`
-(`YYYY-MM-DD`, unquoted is fine here) and a `note`.
+A review log, **most recent first**. Each entry is a `date` (`YYYY-MM-DD`,
+unquoted is fine here) and a `note`.
 
 ```yaml
 progress_notes:
@@ -149,8 +149,14 @@ progress_notes:
     note: Baseline measured at 12 h/feature across four teams.
 ```
 
-Never edit or delete an existing entry — add a new one on top. The editor
-prepends automatically.
+Entries stay ordered newest first. A note can be dated anything, not only the
+day it was written, so tooling that adds or re-dates one is expected to re-sort
+the list rather than assume the newest arrival is the most recent.
+
+Entries are editable: a note written in haste can be corrected, and a
+misdated one moved. What the format does not do is track that history — there
+is no record of what an entry said before, so a log that needs to be
+authoritative belongs somewhere with an audit trail, not here.
 
 ---
 
