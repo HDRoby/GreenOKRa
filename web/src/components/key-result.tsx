@@ -1,9 +1,8 @@
 'use client'
 
-import { ChevronRight, Flag, Layers, MessageSquare } from 'lucide-react'
+import { ChevronRight, Flag, Layers } from 'lucide-react'
 import { Fragment, useState } from 'react'
 
-import { resolveDate } from '@/lib/dates.ts'
 import type { PersonFilter } from '@/lib/filter.ts'
 import type { Path } from '@/lib/edit.ts'
 import { today } from '@/lib/file-access.ts'
@@ -17,15 +16,9 @@ import {
 } from '@/lib/okr.ts'
 
 import type { Editor } from './editor.ts'
-import {
-  AddButton,
-  EnumSelect,
-  PercentSelect,
-  ProgressBar,
-  Reference,
-  TextField,
-} from './fields.tsx'
+import { AddButton, EnumSelect, ProgressBar, Reference, TextField } from './fields.tsx'
 import { LabelPicker } from './label-picker.tsx'
+import { ReviewBadge } from './review-badge.tsx'
 import { TargetDate } from './target-date.tsx'
 
 const ROLE_HINTS: Record<string, string> = {
@@ -43,6 +36,7 @@ export function KeyResultRow({
   reference,
   path,
   timeframe,
+  cadence,
   people,
   person,
   editor,
@@ -51,6 +45,7 @@ export function KeyResultRow({
   reference: string
   path: Path
   timeframe: string | undefined
+  cadence: string | undefined
   people: string[]
   person: PersonFilter
   editor: Editor
@@ -61,7 +56,6 @@ export function KeyResultRow({
   const notes = keyResult.progress_notes ?? []
   const status = keyResult.status ?? ''
   const due = keyResult.target_date ?? ''
-  const resolved = resolveDate(due, timeframe)
 
   return (
     <div className="border-t border-line/60">
@@ -77,29 +71,23 @@ export function KeyResultRow({
             className={`mt-0.5 shrink-0 text-ink-faint transition-transform
               ${open ? 'rotate-90' : ''}`}
           />
-          <Reference id={reference} />
           {!open && (
             <>
-              <span className="mt-0.5 min-w-0 flex-1 truncate text-sm text-ink-muted">
+              <span className="min-w-0 flex-1 truncate text-sm text-ink-muted">
                 {measure.replace(/\s+/g, ' ').trim() || (
                   <em className="text-ink-faint">Nothing measured yet</em>
                 )}
               </span>
-              <span className="mt-0.5 shrink-0 text-xs text-ink-faint">
+              <span className="shrink-0 text-xs text-ink-faint">
                 {due || <span className="italic">(not set)</span>}
-                {resolved && !due.includes('-') && (
-                  <span className="ml-1 tabular-nums opacity-70">{resolved}</span>
-                )}
               </span>
-              {notes.length > 0 && (
-                <span
-                  title={`${notes.length} progress notes`}
-                  className="mt-0.5 flex shrink-0 items-center gap-0.5 text-xs text-ink-faint"
-                >
-                  <MessageSquare size={11} />
-                  {notes.length}
-                </span>
-              )}
+              <span>
+                <ReviewBadge
+                  keyResult={keyResult}
+                  cadence={cadence}
+                  today={today()}
+                />
+              </span>
             </>
           )}
         </button>
@@ -132,7 +120,13 @@ export function KeyResultRow({
       </div>
 
       {open && (
-        <div className="space-y-3 px-4 pb-4 pl-[3.25rem]">
+        <div className="space-y-3 px-4 pb-4 pl-[2.25rem]">
+          {/* The dotted id heads the open card, where an objective and an
+              initiative carry theirs. On the collapsed row it was the same
+              string on every line, spending width to say nothing. */}
+          <div>
+            <Reference id={reference} />
+          </div>
           <TextField
             multiline
             value={measure}
@@ -141,28 +135,15 @@ export function KeyResultRow({
             className="text-sm leading-relaxed"
           />
 
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-ink-faint">
-            <label className="flex items-center gap-1.5">
-              target date
-              <TargetDate
-                label={`${reference} target date`}
-                value={due}
-                timeframe={timeframe}
-                onCommit={(value) => editor.setKeyResult(path, 'target_date', value)}
-              />
-            </label>
-
-            {status === 'In Progress' && (
-              <label className="flex items-center gap-1.5">
-                progress
-                <PercentSelect
-                  label={`${reference} progress`}
-                  value={keyResult.progress}
-                  onChange={(value) => editor.setProgressOverride(path, value)}
-                />
-              </label>
-            )}
-          </div>
+          <label className="flex items-center gap-1.5 text-xs text-ink-faint">
+            target date
+            <TargetDate
+              label={`${reference} target date`}
+              value={due}
+              timeframe={timeframe}
+              onCommit={(value) => editor.setKeyResult(path, 'target_date', value)}
+            />
+          </label>
 
           <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
             {RACI_ROLES.map((role) => (

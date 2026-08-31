@@ -1,7 +1,5 @@
 'use client'
 
-import { ExternalLink, Link2, X } from 'lucide-react'
-
 import { type Path, keyResultPath, statusOptions } from '@/lib/edit.ts'
 import {
   type PersonFilter,
@@ -13,6 +11,7 @@ import { type Objective, objectiveProgress } from '@/lib/okr.ts'
 
 import type { Editor } from './editor.ts'
 import { AddButton, EnumSelect, ProgressBar, Reference, TextField } from './fields.tsx'
+import { LinkRow } from './link-row.tsx'
 import { LabelPicker } from './label-picker.tsx'
 import { KeyResultRow } from './key-result.tsx'
 
@@ -22,6 +21,7 @@ export function ObjectiveCard({
   initiativeIndex,
   objectiveIndex,
   timeframe,
+  cadence,
   pools,
   person,
   inherited,
@@ -32,6 +32,7 @@ export function ObjectiveCard({
   initiativeIndex: number
   objectiveIndex: number
   timeframe: string | undefined
+  cadence: string | undefined
   pools: Pools
   person: PersonFilter
   /** True when the initiative above already matched, revealing everything. */
@@ -110,30 +111,12 @@ export function ObjectiveCard({
           and the way to add one belongs directly under them. */}
       <div className="space-y-1 px-4 pb-3">
         {links.map((link, index) => (
-          <div key={index} className="flex items-center gap-2 text-xs">
-            <Link2 size={12} className="shrink-0 text-ink-faint" />
-            <TextField
-              value={link.title ?? ''}
-              placeholder="Title"
-              onCommit={(value) => editor.setLink(path, index, 'title', value)}
-              className="w-56 text-ink-muted"
-            />
-            <TextField
-              value={link.url ?? ''}
-              placeholder="https://…"
-              onCommit={(value) => editor.setLink(path, index, 'url', value)}
-              className="min-w-0 flex-1 font-mono text-ink-faint"
-            />
-            <FollowLink url={link.url} />
-            <button
-              type="button"
-              onClick={() => editor.removeLink(path, index)}
-              className="shrink-0 text-ink-faint hover:text-dropped"
-              aria-label="Remove link"
-            >
-              <X size={12} />
-            </button>
-          </div>
+          <LinkRow
+            key={index}
+            link={link}
+            onChange={(key, value) => editor.setLink(path, index, key, value)}
+            onRemove={() => editor.removeLink(path, index)}
+          />
         ))}
         <AddButton label="Link" onClick={() => editor.addLink(path)} />
       </div>
@@ -146,6 +129,7 @@ export function ObjectiveCard({
             reference={`${reference}.${keyResult.id ?? '?'}`}
             path={keyResultPath(initiativeIndex, objectiveIndex, index)}
             timeframe={timeframe}
+            cadence={cadence}
             people={pools.people}
             person={person}
             editor={editor}
@@ -157,46 +141,5 @@ export function ObjectiveCard({
         <AddButton label="Key result" onClick={() => editor.addKeyResult(path)} />
       </footer>
     </section>
-  )
-}
-
-/**
- * Opens the page in a new tab.
- *
- * Rendered whether or not there is a URL, so the row does not reflow as one is
- * typed, but inert until the address is something a browser can actually
- * follow. An anchor with no usable href would look live and do nothing.
- */
-function FollowLink({ url }: { url: string | undefined }) {
-  const target = url?.trim() ?? ''
-  const followable = /^https?:\/\/\S+$/i.test(target)
-
-  if (!followable) {
-    return (
-      <span
-        title={
-          target === ''
-            ? 'Add a URL to follow this link'
-            : 'Needs to start with http:// or https:// to be followable'
-        }
-        className="shrink-0 cursor-not-allowed text-ink-faint opacity-40"
-        aria-disabled="true"
-      >
-        <ExternalLink size={12} />
-      </span>
-    )
-  }
-
-  return (
-    <a
-      href={target}
-      target="_blank"
-      rel="noreferrer noopener"
-      title={`Open ${target} in a new tab`}
-      aria-label="Open link in a new tab"
-      className="shrink-0 text-ink-faint hover:text-accent"
-    >
-      <ExternalLink size={12} />
-    </a>
   )
 }

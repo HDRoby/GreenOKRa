@@ -6,7 +6,7 @@ strategic_initiatives:
     title: People
     owner: roberto.basile
     timeframe: "2026"
-    review_cadence: Weekly check-in, quarterly sponsor review
+    review_cadence: Weekly
     status: In Progress
     description: >
       Build the skills and the shared language the organisation needs before any
@@ -55,11 +55,9 @@ strategic_initiatives:
               accountable: [elena.conti]
               responsible: [hr-business-partners]
               informed: [delivery-leads]
-            status: In Progress
+            status: In Completion
             priority: High
             complexity: Low
-            # Ahead of what "In Progress" alone would imply, so state it.
-            progress: 70
             progress_notes:
               - date: 2026-08-25
                 note: 71% submitted. Two practices lagging, chased directly.
@@ -81,7 +79,7 @@ strategic_initiatives:
     title: Process
     owner: marco.ferrari
     timeframe: "2026"
-    review_cadence: Monthly review
+    review_cadence: Quarterly
     status: In Progress
     description: >
       Make the way we govern and deliver work predictable enough that teams stop
@@ -126,10 +124,9 @@ strategic_initiatives:
               accountable: [marco.ferrari]
               responsible: [architecture-board]
               consulted: [delivery-leads]
-            status: In Progress
+            status: Started
             priority: High
             complexity: High
-            progress: 25
             progress_notes:
               - date: 2026-08-18
                 note: >
@@ -160,7 +157,7 @@ strategic_initiatives:
     title: Technology
     owner: roberto.basile
     timeframe: "2026"
-    review_cadence: Weekly check-in, monthly review, quarterly sponsor review
+    review_cadence: Weekly
     status: In Progress
     description: >
       Put AI into the delivery path itself rather than alongside it, and prove
@@ -191,7 +188,6 @@ strategic_initiatives:
             status: In Progress
             priority: High
             complexity: High
-            progress: 40
             progress_notes:
               - date: 2026-08-20
                 note: >

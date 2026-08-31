@@ -13,7 +13,6 @@ export interface Editor {
   setInitiative(path: Path, key: string, value: string, required?: boolean): void
   setObjective(path: Path, key: string, value: string, required?: boolean): void
   setKeyResult(path: Path, key: string, value: string, required?: boolean): void
-  setProgressOverride(path: Path, value: number | null): void
 
   setOwners(keyResult: Path, role: string, names: string[]): void
   setObjectiveOwners(objective: Path, names: string[]): void

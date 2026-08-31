@@ -25,14 +25,37 @@ import {
   parseDocument,
 } from 'yaml'
 
+/**
+ * The status ladder. Each rung carries a percentage, which is why there is no
+ * separate progress field: the status *is* the progress, so nothing can
+ * disagree with anything.
+ *
+ * `Aborted` is not a rung. It means the work no longer counts, and is excluded
+ * from every rollup rather than scoring zero.
+ */
 export const STATUSES = [
   'Not Started',
+  'Started',
   'In Progress',
+  'In Completion',
   'Completed',
   'Aborted',
 ] as const
 export const PRIORITIES = ['Blocker', 'High', 'Medium', 'Low'] as const
 export const COMPLEXITIES = ['Very High', 'High', 'Medium', 'Low'] as const
+/**
+ * How often an initiative is reviewed. Fixed values rather than free text,
+ * because the editor uses this to work out whether a key result is overdue a
+ * review, which it cannot do with a sentence.
+ */
+export const CADENCES = [
+  'Weekly',
+  'Bi-Weekly',
+  'Quarterly',
+  '6 Months',
+  'Yearly',
+] as const
+
 export const RACI_ROLES = [
   'accountable',
   'responsible',
@@ -43,12 +66,20 @@ export const RACI_ROLES = [
 export type Status = (typeof STATUSES)[number]
 export type Priority = (typeof PRIORITIES)[number]
 export type Complexity = (typeof COMPLEXITIES)[number]
+export type Cadence = (typeof CADENCES)[number]
 
 const STATUS_PROGRESS: Record<string, number> = {
   'Not Started': 0,
+  Started: 25,
   'In Progress': 50,
+  'In Completion': 75,
   Completed: 100,
 }
+
+/** Statuses meaning work has begun, whether or not it has finished. */
+export const UNDER_WAY = STATUSES.filter(
+  (status) => status !== 'Not Started' && status !== 'Aborted',
+)
 
 const SI_ID = /^[A-Z]{2,5}$/
 const OBJECTIVE_ID = /^O[0-9]+$/
@@ -89,7 +120,6 @@ export const KR_KEYS = [
   'status',
   'priority',
   'complexity',
-  'progress',
   'progress_notes',
 ] as const
 const LINK_KEYS = ['title', 'url'] as const
@@ -125,7 +155,6 @@ export interface KeyResult {
   status?: string
   priority?: string
   complexity?: string
-  progress?: number
   progress_notes?: ProgressNote[]
 }
 
@@ -221,8 +250,14 @@ export function canonical(
   value: unknown,
   allowed: readonly string[],
 ): string | null {
-  const key = String(value).replace(/[\s_-]+/g, ' ').trim().toLowerCase()
-  return allowed.find((option) => option.toLowerCase() === key) ?? null
+  // Both sides are normalised: an option may itself contain a hyphen, as
+  // `Bi-Weekly` does, and comparing that raw would never match `BI_WEEKLY`.
+  const key = loosen(value)
+  return allowed.find((option) => loosen(option) === key) ?? null
+}
+
+function loosen(value: unknown): string {
+  return String(value).replace(/[\s_-]+/g, ' ').trim().toLowerCase()
 }
 
 const LOOKS_NUMERIC = /^-?\d+(\.\d+)?$/
@@ -567,7 +602,7 @@ function validateInitiative(
   textField(initiative, 'title', prefix, report)
   textField(initiative, 'owner', prefix, report)
   labelField(initiative, 'timeframe', prefix, report)
-  textField(initiative, 'review_cadence', prefix, report, false)
+  enumField(initiative, 'review_cadence', CADENCES, prefix, report, false)
   textField(initiative, 'description', prefix, report, false)
   enumField(initiative, 'status', STATUSES, prefix, report)
 
@@ -677,6 +712,7 @@ function validateKeyResult(
   path: string,
   report: Report,
 ): string | null {
+  retireProgressField(keyResult, path, report)
   unknownKeys(keyResult, KR_KEYS, path, report)
   const keyResultId = identifier(
     keyResult,
@@ -690,10 +726,9 @@ function validateKeyResult(
   textField(keyResult, 'target_measure', prefix, report)
   labelField(keyResult, 'target_date', prefix, report)
   validateOwners(keyResult, prefix, report)
-  const status = enumField(keyResult, 'status', STATUSES, prefix, report)
+  enumField(keyResult, 'status', STATUSES, prefix, report)
   enumField(keyResult, 'priority', PRIORITIES, prefix, report)
   enumField(keyResult, 'complexity', COMPLEXITIES, prefix, report)
-  validateProgress(keyResult, status, prefix, report)
   validateNotes(keyResult, prefix, report)
   return keyResultId
 }
@@ -730,29 +765,24 @@ function validateOwners(keyResult: YAMLMap, path: string, report: Report): void 
   }
 }
 
-function validateProgress(
-  keyResult: YAMLMap,
-  status: string | null,
-  path: string,
-  report: Report,
-): void {
+/**
+ * Drop a `progress` field left over from when it existed.
+ *
+ * Reported as a repair rather than an error: the status ladder now carries the
+ * percentage, so the field has nothing left to say, and refusing to open the
+ * file over it would be unhelpful. Where the two disagreed, the status wins —
+ * it is the value the rollup has always preferred.
+ */
+function retireProgressField(keyResult: YAMLMap, path: string, report: Report): void {
   if (!keyResult.has('progress')) return
-  if (absent(keyResult, 'progress', path, report, false)) return
-  const value = scalarAt(keyResult, 'progress')?.value
-  if (typeof value !== 'number' || !Number.isInteger(value)) {
-    report.error(`${path}.progress: expected a whole number from 0 to 100`)
-    return
-  }
-  if (value < 0 || value > 100) {
-    report.error(`${path}.progress: ${value} is outside the range 0 to 100`)
-    return
-  }
-  if (status !== null && status !== 'In Progress') {
-    report.warn(
-      `${path}.progress: ignored because status is '${status}' ` +
-        "(only 'In Progress' uses it)",
-    )
-  }
+  const previous = scalarAt(keyResult, 'progress')?.value
+  keyResult.items = keyResult.items.filter(
+    (pair) => (isScalar(pair.key) ? String(pair.key.value) : String(pair.key)) !== 'progress',
+  )
+  report.fix(
+    `${path}.progress: removed ${JSON.stringify(previous)} — the status now ` +
+      'carries the percentage',
+  )
 }
 
 function validateNotes(keyResult: YAMLMap, path: string, report: Report): void {
@@ -803,18 +833,19 @@ function noteDate(note: YAMLMap, path: string, report: Report): string | null {
 // Progress rollup
 // --------------------------------------------------------------------------
 
+/**
+ * The percentage a status carries. Null for `Aborted`, and for anything
+ * unrecognised.
+ */
+export function statusProgress(status: string | undefined): number | null {
+  const canonicalStatus = canonical(status, STATUSES)
+  if (canonicalStatus === null || canonicalStatus === 'Aborted') return null
+  return STATUS_PROGRESS[canonicalStatus] ?? null
+}
+
 /** Percentage for one key result, or null when it is aborted. */
 export function keyResultProgress(keyResult: KeyResult): number | null {
-  const status = canonical(keyResult.status, STATUSES)
-  if (status === null || status === 'Aborted') return null
-  if (
-    status === 'In Progress' &&
-    typeof keyResult.progress === 'number' &&
-    Number.isInteger(keyResult.progress)
-  ) {
-    return keyResult.progress
-  }
-  return STATUS_PROGRESS[status]
+  return statusProgress(keyResult.status)
 }
 
 function mean(values: (number | null)[]): number | null {
@@ -823,8 +854,16 @@ function mean(values: (number | null)[]): number | null {
   return live.reduce((sum, value) => sum + value, 0) / live.length
 }
 
-/** Mean of the objective's non-aborted key results. */
+/**
+ * Mean of the objective's non-aborted key results, or null when the objective
+ * itself is aborted.
+ *
+ * Checking its own status matters: without it an aborted objective reported a
+ * percentage while its initiative — which excludes aborted objectives — gave a
+ * different figure, so the two indicators disagreed about the same thing.
+ */
 export function objectiveProgress(objective: Objective): number | null {
+  if (canonical(objective.status, STATUSES) === 'Aborted') return null
   return mean((objective.key_results ?? []).map(keyResultProgress))
 }
 
@@ -835,12 +874,33 @@ export function objectiveProgress(objective: Objective): number | null {
  * more work than one with a single key result.
  */
 export function initiativeProgress(initiative: Initiative): number | null {
+  // Aborted at this level too: the same reasoning, one rung up.
+  if (canonical(initiative.status, STATUSES) === 'Aborted') return null
+
   const values: (number | null)[] = []
   for (const objective of initiative.objectives ?? []) {
     if (canonical(objective.status, STATUSES) === 'Aborted') continue
     values.push(...(objective.key_results ?? []).map(keyResultProgress))
   }
   return mean(values)
+}
+
+/**
+ * The statuses that are a decision somebody took rather than a reading of the
+ * work underneath.
+ */
+const DECIDED_STATUSES = ['Completed', 'Aborted']
+
+/**
+ * `Completed` or `Aborted` when that decision has been taken, otherwise null.
+ *
+ * A summary — a tab, a heading — reports the decision instead of a percentage.
+ * For `Completed` a percentage could contradict it, and for `Aborted` there is
+ * no percentage to show at all.
+ */
+export function decidedStatus(status: string | undefined): string | null {
+  const value = canonical(status, STATUSES)
+  return value !== null && DECIDED_STATUSES.includes(value) ? value : null
 }
 
 /**

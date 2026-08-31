@@ -1,17 +1,19 @@
 'use client'
 
+import { useState } from 'react'
+
 import { initiativePath, statusOptions } from '@/lib/edit.ts'
 import {
+  EVERYONE,
   type PersonFilter,
   ownsInitiative,
   visibleObjectives,
 } from '@/lib/filter.ts'
 import type { Pools } from '@/lib/labels.ts'
-import { type Initiative, initiativeProgress } from '@/lib/okr.ts'
+import { CADENCES, type Initiative, initiativeProgress } from '@/lib/okr.ts'
 
 import type { Editor } from './editor.ts'
 import {
-  AddButton,
   EnumSelect,
   ProgressBar,
   Reference,
@@ -19,6 +21,7 @@ import {
   TimeframeSelect,
 } from './fields.tsx'
 import { LabelPicker } from './label-picker.tsx'
+import { ObjectiveTabs } from './tabs.tsx'
 import { ObjectiveCard } from './objective.tsx'
 
 /** The contents of one initiative tab: its own details, then its objectives. */
@@ -40,6 +43,14 @@ export function InitiativeCard({
   // Owning the initiative makes everything under it relevant.
   const revealsAll = ownsInitiative(initiative, person)
   const objectives = visibleObjectives(initiative.objectives ?? [], person, revealsAll)
+
+  const [objectiveTab, setObjectiveTab] = useState(0)
+  // Clamp, as the initiative tabs do: a filter can hide whichever objective
+  // was open.
+  const activeObjective = objectives.some(({ index }) => index === objectiveTab)
+    ? objectiveTab
+    : (objectives[0]?.index ?? 0)
+  const openObjective = objectives.find(({ index }) => index === activeObjective)
 
   return (
     <article className="space-y-4">
@@ -96,34 +107,54 @@ export function InitiativeCard({
             />
           </Detail>
           <Detail label="review cadence">
-            <TextField
+            {/* Fixed values, because the review indicator on each key result is
+                measured against this. */}
+            <EnumSelect
+              label={`${id} review cadence`}
               value={initiative.review_cadence ?? ''}
-              placeholder="e.g. monthly review"
-              onCommit={(value) =>
+              options={CADENCES}
+              onChange={(value) =>
                 editor.setInitiative(path, 'review_cadence', value, false)
               }
-              className="text-ink-muted"
             />
           </Detail>
         </dl>
       </header>
 
       <div className="space-y-3">
-        {objectives.map(({ item: objective, index: objectiveIndex }) => (
+        <ObjectiveTabs
+          objectives={objectives}
+          active={activeObjective}
+          person={person}
+          inherited={revealsAll}
+          onSelect={setObjectiveTab}
+          onAdd={() => {
+            editor.addObjective(path)
+            // Show what was just created, which lands at the end.
+            setObjectiveTab((initiative.objectives ?? []).length)
+          }}
+        />
+
+        {openObjective ? (
           <ObjectiveCard
-            key={objective.id ?? objectiveIndex}
-            objective={objective}
+            objective={openObjective.item}
             initiativeId={id}
             initiativeIndex={index}
-            objectiveIndex={objectiveIndex}
+            objectiveIndex={openObjective.index}
             timeframe={initiative.timeframe}
+            cadence={initiative.review_cadence}
             pools={pools}
             person={person}
             inherited={revealsAll}
             editor={editor}
           />
-        ))}
-        <AddButton label="Objective" onClick={() => editor.addObjective(path)} />
+        ) : (
+          <p className="py-8 text-center text-sm text-ink-muted">
+            {person === EVERYONE
+              ? 'No objectives yet. Add one above.'
+              : 'No objectives here involve the filtered person.'}
+          </p>
+        )}
       </div>
     </article>
   )

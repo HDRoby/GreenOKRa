@@ -20,7 +20,6 @@ import {
   applyStatusRules,
   removeLink,
   setField,
-  setNumberField,
   setNoteField,
   setObjectiveOwners,
   setOptionalField,
@@ -129,9 +128,6 @@ export default function Page() {
             ? setField(doc, path, key, value, KR_KEYS)
             : setOptionalField(doc, path, key, value, KR_KEYS),
         ),
-      setProgressOverride: (path, value) =>
-        commit((doc) => setNumberField(doc, path, 'progress', value, KR_KEYS)),
-
       setOwners: (path, role, names) => commit((doc) => setOwners(doc, path, role, names)),
       setObjectiveOwners: (path, names) =>
         commit((doc) => setObjectiveOwners(doc, path, names)),
@@ -274,6 +270,7 @@ export default function Page() {
           />
           {current ? (
             <InitiativeCard
+              key={active}
               initiative={current}
               index={active}
               pools={pools}

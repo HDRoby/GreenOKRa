@@ -17,10 +17,18 @@
   --color-accent-dim: oklch(0.45 0.09 155);
 
   --color-warn: oklch(0.79 0.13 78);
-  --color-done: oklch(0.72 0.15 155);
-  --color-active: oklch(0.75 0.13 230);
-  --color-idle: oklch(0.6 0.01 260);
   --color-dropped: oklch(0.62 0.13 25);
+
+  /*
+   * The status ladder, as a hue sweep from violet through blue and teal to
+   * green. Distinct hues rather than one hue getting lighter, because at pill
+   * size a lightness ramp is unreadable.
+   */
+  --color-idle: oklch(0.6 0.01 260);
+  --color-begun: oklch(0.72 0.13 292);
+  --color-active: oklch(0.75 0.13 245);
+  --color-closing: oklch(0.76 0.12 195);
+  --color-done: oklch(0.72 0.15 155);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;

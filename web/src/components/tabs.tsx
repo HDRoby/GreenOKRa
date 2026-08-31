@@ -7,9 +7,92 @@ import {
   type Indexed,
   type PersonFilter,
   ownsInitiative,
+  ownsObjective,
+  visibleKeyResults,
   visibleObjectives,
 } from '@/lib/filter.ts'
-import { type Initiative, formatProgress, initiativeProgress } from '@/lib/okr.ts'
+import {
+  type Initiative,
+  type Objective,
+  decidedStatus,
+  formatProgress,
+  initiativeProgress,
+  objectiveProgress,
+} from '@/lib/okr.ts'
+
+import { textToneFor } from './fields.tsx'
+
+/**
+ * One tab. Title, how many things are inside it, and how far along it is.
+ *
+ * Shared by both strips so an objective tab and an initiative tab cannot drift
+ * apart; `weight` is the only difference, initiatives being the larger of the
+ * two.
+ */
+function TabButton({
+  label,
+  count,
+  countLabel,
+  progress,
+  status,
+  selected,
+  title,
+  weight,
+  onClick,
+}: {
+  label: string
+  count: number
+  countLabel: string
+  progress: number | null
+  status: string | undefined
+  selected: boolean
+  title: string
+  weight: 'primary' | 'secondary'
+  onClick: () => void
+}) {
+  // A decision taken is reported as such, in its own colour.
+  const decided = decidedStatus(status)
+
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      title={title}
+      onClick={onClick}
+      className={`flex shrink-0 items-center gap-2 border-b-2 transition-colors
+        ${weight === 'primary' ? 'px-3 py-2 text-sm' : 'px-2.5 py-1.5 text-xs'}
+        ${
+          selected
+            ? 'border-accent text-ink'
+            : 'border-transparent text-ink-muted hover:border-line hover:text-ink'
+        }`}
+    >
+      <span className={selected ? 'font-medium' : ''}>{label}</span>
+      <span
+        aria-label={countLabel}
+        className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full
+          px-1.5 text-[11px] tabular-nums
+          ${selected ? 'bg-accent-dim/35 text-ink' : 'bg-surface-raised text-ink-faint'}`}
+      >
+        {count}
+      </span>
+      <span
+        className={
+          decided
+            ? `text-xs font-medium ${textToneFor(decided)}`
+            : 'text-xs tabular-nums text-ink-faint'
+        }
+      >
+        {decided ?? formatProgress(progress)}
+      </span>
+    </button>
+  )
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`
+}
 
 /**
  * One tab per strategic initiative. There are only ever a handful, and each
@@ -40,7 +123,6 @@ export function InitiativeTabs({
         className="flex items-stretch gap-1 overflow-x-auto border-b border-line"
       >
         {initiatives.map(({ item: initiative, index }) => {
-          const selected = index === active
           // Count what the tab will actually show, not the whole initiative,
           // so the badge does not promise objectives the filter has hidden.
           const objectives = visibleObjectives(
@@ -50,47 +132,25 @@ export function InitiativeTabs({
           ).length
 
           return (
-            <button
+            <TabButton
               key={initiative.id ?? index}
-              role="tab"
-              aria-selected={selected}
-              onClick={() => onSelect(index)}
+              label={initiative.title || 'Untitled'}
+              count={objectives}
+              countLabel={plural(objectives, 'objective')}
+              progress={initiativeProgress(initiative)}
+              status={initiative.status}
+              selected={index === active}
               // The id is dropped from the label to keep it short, but stays
               // reachable on hover — it is what tickets and notes refer to.
-              title={`${initiative.id ?? '?'} — ${objectives} ${
-                objectives === 1 ? 'objective' : 'objectives'
-              }`}
-              className={`flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm
-                transition-colors
-                ${
-                  selected
-                    ? 'border-accent text-ink'
-                    : 'border-transparent text-ink-muted hover:border-line hover:text-ink'
-                }`}
-            >
-              <span className={selected ? 'font-medium' : ''}>
-                {initiative.title || 'Untitled'}
-              </span>
-              <span
-                aria-label={`${objectives} objectives`}
-                className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full
-                  px-1.5 text-[11px] tabular-nums
-                  ${
-                    selected
-                      ? 'bg-accent-dim/35 text-ink'
-                      : 'bg-surface-raised text-ink-faint'
-                  }`}
-              >
-                {objectives}
-              </span>
-              <span className="tabular-nums text-xs text-ink-faint">
-                {formatProgress(initiativeProgress(initiative))}
-              </span>
-            </button>
+              title={`${initiative.id ?? '?'} — ${plural(objectives, 'objective')}`}
+              weight="primary"
+              onClick={() => onSelect(index)}
+            />
           )
         })}
 
         <button
+          type="button"
           onClick={() => setAdding(!adding)}
           aria-label={adding ? 'Cancel new initiative' : 'New initiative'}
           title="New strategic initiative"
@@ -109,6 +169,71 @@ export function InitiativeTabs({
           }}
         />
       )}
+    </div>
+  )
+}
+
+/**
+ * One tab per objective, inside the selected initiative.
+ *
+ * Same reasoning a level down: an objective carries a list of key results, and
+ * stacking several of those makes a page nobody scrolls to the bottom of.
+ */
+export function ObjectiveTabs({
+  objectives,
+  active,
+  person,
+  inherited,
+  onSelect,
+  onAdd,
+}: {
+  objectives: Indexed<Objective>[]
+  active: number
+  person: PersonFilter
+  /** True when the initiative itself is the filtered person's. */
+  inherited: boolean
+  onSelect: (index: number) => void
+  onAdd: () => void
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Objectives"
+      className="flex items-stretch gap-1 overflow-x-auto border-b border-line/70"
+    >
+      {objectives.map(({ item: objective, index }) => {
+        const keyResults = visibleKeyResults(
+          objective.key_results ?? [],
+          person,
+          inherited || ownsObjective(objective, person),
+        ).length
+
+        return (
+          <TabButton
+            key={objective.id ?? index}
+            label={objective.title || 'Untitled'}
+            count={keyResults}
+            countLabel={plural(keyResults, 'key result')}
+            progress={objectiveProgress(objective)}
+            status={objective.status}
+            selected={index === active}
+            title={`${objective.id ?? '?'} — ${plural(keyResults, 'key result')}`}
+            weight="secondary"
+            onClick={() => onSelect(index)}
+          />
+        )
+      })}
+
+      <button
+        type="button"
+        onClick={onAdd}
+        aria-label="New objective"
+        title="New objective"
+        className="ml-1 shrink-0 self-center rounded-md border border-line p-1
+          text-ink-faint hover:border-accent-dim hover:text-accent"
+      >
+        <Plus size={13} />
+      </button>
     </div>
   )
 }

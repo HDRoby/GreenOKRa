@@ -12,7 +12,14 @@
 
 import { Document, Pair, Scalar, YAMLMap, YAMLSeq, isMap, isScalar, isSeq } from 'yaml'
 
-import { KR_KEYS, OBJECTIVE_KEYS, SI_KEYS, STATUSES, canonical } from './okr.ts'
+import {
+  KR_KEYS,
+  OBJECTIVE_KEYS,
+  SI_KEYS,
+  STATUSES,
+  UNDER_WAY,
+  canonical,
+} from './okr.ts'
 
 export type Path = (string | number)[]
 
@@ -91,33 +98,6 @@ export function setOptionalField(
     return
   }
   setField(doc, parent, key, value, order)
-}
-
-/**
- * Set a numeric field. Numbers need a number scalar: writing the string '40'
- * would be emitted quoted, and then read back as text.
- */
-export function setNumberField(
-  doc: Document,
-  parent: Path,
-  key: string,
-  value: number | null,
-  order: readonly string[],
-): void {
-  const map = doc.getIn(parent, true)
-  if (!isMap(map)) return
-
-  if (value === null) {
-    map.items = map.items.filter((pair) => keyOf(pair) !== key)
-    return
-  }
-
-  const existing = map.items.find((pair) => keyOf(pair) === key)
-  if (existing) {
-    existing.value = new Scalar(value)
-    return
-  }
-  insertOrdered(map, key, new Scalar(value), order)
 }
 
 /** Replace one RACI role's list of names. Clearing it removes the role. */
@@ -401,8 +381,12 @@ export function addInitiative(
 export const STATUS_DECISIONS = ['Completed', 'Aborted'] as const
 
 /**
- * Advance a `Not Started` parent to `In Progress` when any child is already in
- * progress. Returns whether it moved.
+ * Advance a `Not Started` parent to `In Progress` once any child has begun.
+ * Returns whether it moved.
+ *
+ * "Begun" is any rung above `Not Started`, so a child sitting at `Started` or
+ * already `Completed` counts. Only `Aborted` does not, since it means the work
+ * no longer applies.
  *
  * `Completed` and `Aborted` are human judgements and are never overwritten —
  * an initiative can be closed while objectives still move under it. The
@@ -417,9 +401,11 @@ function advance(
   order: readonly string[],
 ): boolean {
   if (canonical(parent.get('status'), STATUSES) !== 'Not Started') return false
-  const active = children.items.some(
-    (child) => isMap(child) && canonical(child.get('status'), STATUSES) === 'In Progress',
-  )
+  const active = children.items.some((child) => {
+    if (!isMap(child)) return false
+    const status = canonical(child.get('status'), STATUSES)
+    return status !== null && UNDER_WAY.includes(status as never)
+  })
   if (!active) return false
   setField(doc, path, 'status', 'In Progress', order)
   return true

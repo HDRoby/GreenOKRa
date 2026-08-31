@@ -8,12 +8,14 @@ import {
   type Objective,
   STATUSES,
   canonical,
+  decidedStatus,
   displayProgress,
   formatProgress,
   initiativeProgress,
   keyResultProgress,
   objectiveProgress,
   parse,
+  statusProgress,
   stringify,
   toData,
   validate,
@@ -95,7 +97,7 @@ describe('the sample file', () => {
         round(initiativeProgress(initiative)),
       ]),
     )
-    expect(progress).toEqual({ PEP: 40, PRO: 41.7, TEK: 47.5 })
+    expect(progress).toEqual({ PEP: 41.7, PRO: 41.7, TEK: 50 })
   })
 })
 
@@ -174,6 +176,34 @@ describe('autocorrect', () => {
   })
 })
 
+/**
+ * The field existed before the status ladder carried the percentage. A file
+ * still holding one is repaired rather than rejected.
+ */
+describe('a legacy progress field', () => {
+  test('is retired as a repair, not an error', () => {
+    const doc = base()
+    doc.setIn(path.keyResult('progress'), 40)
+
+    const report = validate(doc)
+
+    expect(report.errors).toEqual([])
+    expect(report.fixes.join('\n')).toContain('removed 40')
+    expect(stringify(doc)).not.toContain('progress:')
+  })
+
+  test('leaves the status to decide the percentage', () => {
+    const doc = base()
+    doc.setIn(path.keyResult('progress'), 90)
+    validate(doc)
+
+    // The key result is In Progress, so 50 — the 90 is gone, not honoured.
+    const keyResult =
+      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results?.[0]
+    expect(keyResultProgress(keyResult ?? {})).toBe(50)
+  })
+})
+
 describe('canonical', () => {
   test('accepts legacy and sloppy spellings', () => {
     for (const variant of [
@@ -249,12 +279,6 @@ describe('errors', () => {
     )
   })
 
-  test('rejects progress outside 0 to 100', () => {
-    expect(errorsFor((doc) => doc.setIn(path.keyResult('progress'), 140))).toContain(
-      'outside the range 0 to 100',
-    )
-  })
-
   test('requires at least one owner', () => {
     expect(
       errorsFor((doc) => doc.setIn(path.keyResult('owners'), { accountable: [] })),
@@ -315,32 +339,54 @@ describe('warnings', () => {
     ).toContain('most recent first')
   })
 
-  test('warns when progress is set on a completed key result', () => {
-    expect(
-      warningsFor((doc) => {
-        doc.setIn(path.keyResult('status'), 'Completed')
-        doc.setIn(path.keyResult('progress'), 50)
-      }),
-    ).toContain('ignored because status is')
+  test('says nothing about a status that is simply further up the ladder', () => {
+    expect(warningsFor((doc) => doc.setIn(path.keyResult('status'), 'In Completion')))
+      .toBe('')
   })
 })
 
 // ---------------------------------------------------------------------------
 describe('progress rollup', () => {
-  const kr = (status: string, progress?: number): KeyResult => ({
-    status,
-    ...(progress === undefined ? {} : { progress }),
-  })
+  const kr = (status: string): KeyResult => ({ status })
 
   test('maps status to a percentage', () => {
     expect(keyResultProgress(kr('Not Started'))).toBe(0)
+    expect(keyResultProgress(kr('Started'))).toBe(25)
     expect(keyResultProgress(kr('In Progress'))).toBe(50)
+    expect(keyResultProgress(kr('In Completion'))).toBe(75)
     expect(keyResultProgress(kr('Completed'))).toBe(100)
     expect(keyResultProgress(kr('Aborted'))).toBeNull()
   })
 
-  test('lets an explicit progress override the status default', () => {
-    expect(keyResultProgress(kr('In Progress', 80))).toBe(80)
+  /**
+   * What the editor labels the "no override" choice with, so the label cannot
+   * drift from the table it describes.
+   */
+  test('every rung of the ladder carries its percentage', () => {
+    expect(statusProgress('Not Started')).toBe(0)
+    expect(statusProgress('Started')).toBe(25)
+    expect(statusProgress('In Progress')).toBe(50)
+    expect(statusProgress('In Completion')).toBe(75)
+    expect(statusProgress('Completed')).toBe(100)
+  })
+
+  test('aborted work has no percentage, and nor has nonsense', () => {
+    expect(statusProgress('Aborted')).toBeNull()
+    expect(statusProgress(undefined)).toBeNull()
+    expect(statusProgress('nonsense')).toBeNull()
+  })
+
+  test('the rungs are multiples of 5, so nothing needs rounding', () => {
+    for (const status of STATUSES) {
+      const value = statusProgress(status)
+      if (value !== null) expect(value % 5).toBe(0)
+    }
+  })
+
+  test('a key result reports exactly what its status carries', () => {
+    for (const status of STATUSES) {
+      expect(keyResultProgress(kr(status))).toBe(statusProgress(status))
+    }
   })
 
   test('averages an objective over its key results', () => {
@@ -375,6 +421,65 @@ describe('progress rollup', () => {
     // Flat over four key results: 2 of 4 done. Averaging the two objective
     // percentages would have given 33.3%.
     expect(round(initiativeProgress(initiative))).toBe(50)
+  })
+
+  /**
+   * The indicators have to agree about the same record. An aborted objective
+   * that still reported a percentage while its initiative excluded it made the
+   * objective tab and the initiative tab contradict each other.
+   */
+  test('an aborted objective reports no percentage of its own', () => {
+    const objective: Objective = {
+      status: 'Aborted',
+      key_results: [kr('Completed'), kr('In Progress')],
+    }
+    expect(objectiveProgress(objective)).toBeNull()
+    expect(formatProgress(objectiveProgress(objective))).toBe('—')
+  })
+
+  test('an aborted initiative reports no percentage of its own', () => {
+    const initiative: Initiative = {
+      status: 'Aborted',
+      objectives: [{ status: 'In Progress', key_results: [kr('Completed')] }],
+    }
+    expect(initiativeProgress(initiative)).toBeNull()
+  })
+
+  /**
+   * What a tab shows. Completed and Aborted are decisions, and a summary
+   * reports the decision rather than a number that would contradict it — or,
+   * for aborted work, would not exist.
+   */
+  describe('decidedStatus', () => {
+    test('names the decision when one has been taken', () => {
+      expect(decidedStatus('Completed')).toBe('Completed')
+      expect(decidedStatus('Aborted')).toBe('Aborted')
+    })
+
+    test('says nothing for a rung that is merely progress', () => {
+      for (const rung of ['Not Started', 'Started', 'In Progress', 'In Completion']) {
+        expect(decidedStatus(rung)).toBeNull()
+      }
+    })
+
+    test('reads leniently, and shrugs at nonsense', () => {
+      expect(decidedStatus('completed')).toBe('Completed')
+      expect(decidedStatus('ABORTED')).toBe('Aborted')
+      expect(decidedStatus(undefined)).toBeNull()
+      expect(decidedStatus('nearly')).toBeNull()
+    })
+  })
+
+  test('the other rungs leave an objective percentage to its key results', () => {
+    for (const status of ['Not Started', 'Started', 'In Progress', 'Completed']) {
+      const objective: Objective = {
+        status,
+        key_results: [kr('Completed'), kr('Not Started')],
+      }
+      // The status of an objective describes the objective; the percentage
+      // comes from the work underneath it.
+      expect(objectiveProgress(objective)).toBe(50)
+    }
   })
 
   test('excludes an aborted objective from its initiative', () => {

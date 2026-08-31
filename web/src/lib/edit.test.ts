@@ -12,7 +12,6 @@ import {
   removeNote,
   setField,
   setNoteField,
-  setNumberField,
   setObjectiveOwners,
   setOptionalField,
   setOwners,
@@ -117,41 +116,6 @@ describe('setOptionalField', () => {
     setOptionalField(doc, initiative, 'description', '   ', SI_KEYS)
     expect(stringify(doc)).not.toContain('description')
     expectStillSound(doc)
-  })
-})
-
-describe('setNumberField', () => {
-  test('writes an unquoted number that reads back as a number', () => {
-    const doc = parse(BASE)
-    setNumberField(doc, keyResult, 'progress', 40, KR_KEYS)
-
-    const text = stringify(doc)
-    expect(text).toContain('progress: 40')
-    expect(text).not.toContain('progress: "40"')
-
-    // A quoted value would fail validation and break the rollup.
-    const reparsed = parse(text)
-    expect(validate(reparsed).errors).toEqual([])
-    const keyResults =
-      toData(reparsed).strategic_initiatives?.[0]?.objectives?.[0]?.key_results
-    expect(keyResults?.[0]?.progress).toBe(40)
-  })
-
-  test('removes the override when cleared', () => {
-    const doc = parse(BASE)
-    setNumberField(doc, keyResult, 'progress', 40, KR_KEYS)
-    setNumberField(doc, keyResult, 'progress', null, KR_KEYS)
-    expect(stringify(doc)).not.toContain('progress')
-    expectStillSound(doc)
-  })
-
-  test('feeds through to the rollup', () => {
-    const doc = parse(BASE)
-    // KR1 In Progress, KR2 Aborted and excluded: the initiative reads KR1 alone.
-    expect(initiativeProgress(toData(doc).strategic_initiatives?.[0] ?? {})).toBe(50)
-
-    setNumberField(doc, keyResult, 'progress', 90, KR_KEYS)
-    expect(initiativeProgress(toData(doc).strategic_initiatives?.[0] ?? {})).toBe(90)
   })
 })
 

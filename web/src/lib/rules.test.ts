@@ -310,6 +310,24 @@ describe('status rules', () => {
     expect(toData(doc).strategic_initiatives?.[0]?.status).toBe('In Progress')
   })
 
+  /**
+   * "Begun" is any rung above Not Started, so the lowest one counts — and so
+   * does work that is already finished.
+   */
+  test('advances on any rung above Not Started', () => {
+    for (const rung of ['Started', 'In Progress', 'In Completion', 'Completed']) {
+      const doc = parse(FILE)
+      setField(doc, keyResultStatus(0, 0), 'status', rung, KR_KEYS)
+      expect(applyStatusRules(doc)).toEqual(['TEK.O1', 'TEK'])
+    }
+  })
+
+  test('an aborted key result does not count as begun', () => {
+    const doc = parse(FILE)
+    setField(doc, keyResultStatus(0, 0), 'status', 'Aborted', KR_KEYS)
+    expect(applyStatusRules(doc)).toEqual([])
+  })
+
   test('advances an objective once a key result is in progress', () => {
     const doc = parse(FILE)
     setField(doc, keyResultStatus(0, 0), 'status', 'In Progress', KR_KEYS)

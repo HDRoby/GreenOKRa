@@ -34,8 +34,11 @@ it honest for tooling.
 
 ### Why percentages are computed
 
-Progress is derived from Key Result status, never stored. A file cannot drift out
-of sync with itself, and nobody has to maintain a rollup by hand. See
+Status is a ladder — `Not Started`, `Started`, `In Progress`, `In Completion`,
+`Completed` — and each rung carries a percentage, 0 through 100 in quarters.
+There is no separate progress field, so the two cannot disagree, and no rollup
+is maintained by hand. `Aborted` is not a rung: it means the work no longer
+counts, and it is excluded rather than scored zero. See
 [Progress](SPEC.md#progress).
 
 ## Repository layout
@@ -113,6 +116,14 @@ Owners appear as coloured chips, one colour per person, so the same name is
 recognisable at a glance across the file. Priority and complexity share their
 values (High, Medium, Low), so each carries an icon — a flag for priority,
 layers for complexity — to tell them apart without reading.
+
+Each key result carries a clock showing whether it is overdue a review, judged
+against its initiative's cadence and the date of its newest note: green while on
+time, amber once the interval has passed, red beyond twice it. Finished work
+shows nothing, because nothing needs reviewing after it is done.
+
+Links show their text and hide their address, the way a markdown editor does —
+opening one reveals **text shown** and **URI link** as separate fields.
 
 Initiative and objective statuses are mostly derived: each advances from
 `Not Started` to `In Progress` once work below it starts, so moving one key

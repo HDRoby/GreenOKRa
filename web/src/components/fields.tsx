@@ -95,20 +95,58 @@ export function TextField({
   )
 }
 
-const TONES: Record<string, string> = {
-  'Not Started': 'text-idle border-idle/40 bg-idle/10',
-  'In Progress': 'text-active border-active/40 bg-active/10',
-  Completed: 'text-done border-done/40 bg-done/10',
-  Aborted: 'text-dropped border-dropped/40 bg-dropped/10',
-  Blocker: 'text-dropped border-dropped/40 bg-dropped/10',
-  High: 'text-warn border-warn/40 bg-warn/10',
-  'Very High': 'text-dropped border-dropped/40 bg-dropped/10',
-  Medium: 'text-ink-muted border-line bg-surface-raised',
-  Low: 'text-ink-faint border-line bg-surface-raised',
+/**
+ * The colour each enum value is drawn in, as a pill and as bare text.
+ *
+ * Both spellings are written out rather than composed, because Tailwind reads
+ * literal class names out of the source — `text-${colour}` would never reach
+ * the stylesheet. Keeping them in one entry is what stops a tab and a pill
+ * disagreeing about what colour a status is.
+ */
+const TONES: Record<string, { pill: string; text: string }> = {
+  // The status ladder.
+  'Not Started': { pill: 'text-idle border-idle/40 bg-idle/10', text: 'text-idle' },
+  Started: { pill: 'text-begun border-begun/40 bg-begun/10', text: 'text-begun' },
+  'In Progress': {
+    pill: 'text-active border-active/40 bg-active/10',
+    text: 'text-active',
+  },
+  'In Completion': {
+    pill: 'text-closing border-closing/40 bg-closing/10',
+    text: 'text-closing',
+  },
+  Completed: { pill: 'text-done border-done/40 bg-done/10', text: 'text-done' },
+  Aborted: {
+    pill: 'text-dropped border-dropped/40 bg-dropped/10',
+    text: 'text-dropped',
+  },
+  // Priority and complexity, which share their values.
+  Blocker: {
+    pill: 'text-dropped border-dropped/40 bg-dropped/10',
+    text: 'text-dropped',
+  },
+  'Very High': {
+    pill: 'text-dropped border-dropped/40 bg-dropped/10',
+    text: 'text-dropped',
+  },
+  High: { pill: 'text-warn border-warn/40 bg-warn/10', text: 'text-warn' },
+  Medium: {
+    pill: 'text-ink-muted border-line bg-surface-raised',
+    text: 'text-ink-muted',
+  },
+  Low: {
+    pill: 'text-ink-faint border-line bg-surface-raised',
+    text: 'text-ink-faint',
+  },
 }
 
 function toneFor(value: string): string {
-  return TONES[value] ?? 'text-ink-muted border-line bg-surface-raised'
+  return TONES[value]?.pill ?? 'text-ink-muted border-line bg-surface-raised'
+}
+
+/** Just the colour, for places that show the word rather than a pill. */
+export function textToneFor(value: string): string {
+  return TONES[value]?.text ?? 'text-ink-muted'
 }
 
 /** The pill an enum value becomes, used both closed and in the list. */
@@ -168,43 +206,6 @@ export function EnumSelect({
         focus:outline-none focus:ring-1 focus:ring-accent-dim
         ${icon ? 'pl-2' : 'pl-2.5'}
         ${known ? toneFor(value) : 'border-dropped bg-dropped/10 text-dropped'}`}
-    />
-  )
-}
-
-const PERCENT_STEPS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-
-/**
- * Progress in tenths. Finer than that is false precision — nobody knows a key
- * result is 47% done — and the status already carries the coarse signal.
- */
-export function PercentSelect({
-  value,
-  onChange,
-  label,
-}: {
-  value: number | null | undefined
-  onChange: (value: number | null) => void
-  label: string
-}) {
-  // A file may hold any whole number; keep it selectable rather than snapping
-  // it to a tenth behind the user's back.
-  const odd = typeof value === 'number' && !PERCENT_STEPS.includes(value)
-  const options: DropdownOption[] = [
-    { value: '', label: 'auto' },
-    ...(odd ? [{ value: String(value), label: `${value}%` }] : []),
-    ...PERCENT_STEPS.map((step) => ({ value: String(step), label: `${step}%` })),
-  ]
-
-  return (
-    <Dropdown
-      value={value === null || value === undefined ? '' : String(value)}
-      options={options}
-      onChange={(next) => onChange(next === '' ? null : Number(next))}
-      label={label}
-      triggerClassName="cursor-pointer rounded-md border border-line bg-surface-raised
-        py-0.5 pr-1.5 pl-2 text-xs tabular-nums text-ink-muted
-        focus:outline-none focus:ring-1 focus:ring-accent-dim"
     />
   )
 }

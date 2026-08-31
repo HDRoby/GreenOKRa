@@ -24,7 +24,7 @@ strategic_initiatives:
     title: Technology
     owner: roberto.basile
     timeframe: "2026"
-    review_cadence: Monthly review, quarterly sponsor review
+    review_cadence: Quarterly
     status: In Progress
     objectives:
       - id: O1
@@ -74,7 +74,7 @@ Top level has exactly two keys:
 | `title` | yes | Plain-language name, e.g. `People`, `Process`, `Technology`. |
 | `owner` | yes | Single accountable person for the whole initiative. |
 | `timeframe` | yes | A year, optionally narrowed to a half or a quarter: `"2026"`, `"2026.H1"`, `"2026.Q3"`. **Quote it** — see [Gotchas](#gotchas). |
-| `review_cadence` | no | Free text: `Weekly check-in`, `Monthly review, quarterly sponsor review`. |
+| `review_cadence` | no | How often the work is looked at: `Weekly`, `Bi-Weekly`, `Quarterly`, `6 Months`, `Yearly`. |
 | `status` | yes | See [Status](#status). |
 | `description` | no | Free-form context. |
 | `objectives` | yes | List of Objectives. At least one. |
@@ -114,10 +114,9 @@ is derived by joining with dots; never store it as a field.
 | `target_measure` | yes | The measurable indicator *and* the target that counts as success, in one sentence. E.g. *"Coding time saved versus the pre-orchestrator baseline reaches at least 60%."* |
 | `target_date` | yes | A date or a label: `"2026-09-30"`, `Q3`, `H2`, `September`. Always a string — **quote real dates**. |
 | `owners` | yes | RACI map. See below. |
-| `status` | yes | `Not Started`, `In Progress`, `Completed`, `Aborted`. |
+| `status` | yes | See [Status](#status). Carries the percentage. |
 | `priority` | yes | `Blocker`, `High`, `Medium`, `Low`. |
 | `complexity` | yes | `Very High`, `High`, `Medium`, `Low`. |
-| `progress` | no | Integer `0`–`100`. Overrides the status-derived percentage when you know better. See [Progress](#progress). |
 | `progress_notes` | no | Review history. See below. |
 
 A Key Result is addressed as `<SI id>.<objective id>.<KR id>` — `TEK.O1.KR2`,
@@ -158,18 +157,37 @@ misdated one moved. What the format does not do is track that history — there
 is no record of what an entry said before, so a log that needs to be
 authoritative belongs somewhere with an audit trail, not here.
 
+### Reviews falling behind
+
+The newest note's date is when a Key Result was last looked at, and the
+initiative's `review_cadence` says how often it should be. The editor compares
+the two and marks a Key Result as on time, overdue, or badly overdue — amber
+once the interval has passed, red beyond twice it.
+
+That is a reading of the file, not a rule of it: a file whose notes are years
+old is perfectly valid, it is just not being looked after. Finished work is
+exempt, since nothing needs reviewing after it is `Completed` or `Aborted`, and
+so is an initiative with no cadence set.
+
 ---
 
 ## Status
 
-The same four values apply at every level:
+A ladder, where each rung carries a percentage. The same values apply at every
+level.
 
-| Value | Meaning |
-|---|---|
-| `Not Started` | Agreed but no work begun. |
-| `In Progress` | Actively being worked. |
-| `Completed` | Done, target met. |
-| `Aborted` | Dropped or descoped. Not a failure — it no longer counts. |
+| Value | Progress | Meaning |
+|---|---|---|
+| `Not Started` | 0% | Agreed but no work begun. |
+| `Started` | 25% | Under way, early. |
+| `In Progress` | 50% | Squarely in the middle of it. |
+| `In Completion` | 75% | Nearly there. |
+| `Completed` | 100% | Done, target met. |
+| `Aborted` | — | Dropped or descoped. Not a failure, and not a zero — it no longer counts at all. |
+
+There is no separate progress field. The status *is* the progress, so the two
+cannot disagree, and a percentage cannot be quietly maintained by hand while the
+status says something else.
 
 Status is **authored** at every level, including on Strategic Initiatives and
 Objectives. It is a human judgement, not a rollup: an initiative can be
@@ -181,10 +199,13 @@ Percentages, by contrast, are always computed.
 ### One editor convenience
 
 The editor advances anything sitting at `Not Started` to `In Progress` as soon
-as work below it has begun — an Objective when one of its Key Results is
-`In Progress`, a Strategic Initiative when one of its Objectives is — and says
-so when it does. A Key Result starting work therefore carries up both levels at
-once.
+as work below it has begun — an Objective when one of its Key Results has, a
+Strategic Initiative when one of its Objectives has — and says so when it does.
+A Key Result starting work therefore carries up both levels at once.
+
+"Begun" means any rung above `Not Started`, so the lowest one counts, and so
+does work already `Completed`. `Aborted` does not: it means the work no longer
+applies.
 
 That is a convenience, not a rule of the format: a file where the levels
 disagree is still valid, and any other tool is free to leave it alone.
@@ -198,14 +219,9 @@ it never having started.
 
 ## Progress
 
-Every Key Result maps to a percentage:
-
-| Status | Progress |
-|---|---|
-| `Not Started` | 0% |
-| `In Progress` | 50%, unless an explicit `progress` field says otherwise |
-| `Completed` | 100% |
-| `Aborted` | *excluded* — counts in neither numerator nor denominator |
+Every Key Result's percentage is the one its status carries, from the table in
+[Status](#status). `Aborted` is *excluded* — it counts in neither numerator nor
+denominator.
 
 Then roll up by plain average:
 
@@ -215,15 +231,31 @@ Then roll up by plain average:
   objective with six Key Results represents more work than one with a single Key
   Result, and flattening keeps every Key Result weighted equally.
 
-Two exclusion rules:
+Exclusion rules:
 
-- An `Aborted` **Objective** is excluded entirely from its initiative's progress.
+- An `Aborted` **Objective** is excluded entirely from its initiative's progress,
+  and has no percentage of its own either — it reports `—`, exactly as an
+  aborted Key Result does. The two must agree: an objective that showed a
+  figure while its initiative ignored it would make the same record read two
+  different ways.
+- An `Aborted` **Strategic Initiative** likewise reports `—`.
 - If every Key Result in scope is aborted, progress is **undefined** — display
   `—`, not `0%`.
 
-No weights, no confidence scores. If a Key Result needs to say it is 80% of the
-way there, that is what the optional `progress` field is for — in steps of 10%,
-because nobody knows a Key Result is 47% done.
+Every other status leaves the computed percentage to the work underneath: a
+`Completed` Objective whose Key Results are half done still *computes* to what
+its Key Results say.
+
+Where an editor shows a summary rather than the detail — a tab, a heading — it
+reports `Completed` or `Aborted` as the word instead of a figure. Those two are
+decisions somebody took, and a percentage beside one would either contradict it
+or, for aborted work, not exist. The detail underneath still shows the computed
+value, which is where a Completed Objective with unfinished Key Results becomes
+visible.
+
+No weights, no confidence scores, and no way to say a Key Result is 47% done —
+because nobody knows that. Four rungs between nothing and finished is as much
+precision as a status honestly supports.
 
 ### Displaying a percentage
 
