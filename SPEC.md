@@ -22,9 +22,9 @@ version: 1
 strategic_initiatives:
   - id: TEK
     title: Technology
-    owner: roberto.basile
+    owner: {name: roberto.basile, email: roberto.basile@example.com}
     timeframe: "2026"
-    review_cadence: Quarterly
+    review_cadence: Monthly
     status: In Progress
     objectives:
       - id: O1
@@ -33,7 +33,9 @@ strategic_initiatives:
           Delivery teams still hand-write scaffolding and tests.
           Close the gap between an approved design and running code.
         theme: AI-assisted SDLC
-        owners: [roberto.basile, maria.rossi]
+        owners:
+          - {name: roberto.basile, email: roberto.basile@example.com}
+          - {name: maria.rossi, email: maria.rossi@example.com}
         status: In Progress
         links:
           - title: AI-assisted SDLC charter
@@ -45,10 +47,14 @@ strategic_initiatives:
               reaches at least 60%.
             target_date: Q3
             owners:
-              accountable: [roberto.basile]
-              responsible: [maria.rossi]
-              consulted: [architecture-board]
-              informed: [cto]
+              accountable:
+                - {name: roberto.basile, email: roberto.basile@example.com}
+              responsible:
+                - {name: maria.rossi, email: maria.rossi@example.com}
+              consult:
+                - {name: architecture-board}
+              inform:
+                - {name: cto}
             status: In Progress
             priority: High
             complexity: High
@@ -72,9 +78,9 @@ Top level has exactly two keys:
 |---|---|---|
 | `id` | yes | Short uppercase code, 2–5 letters, unique in the file: `PEP`, `PRO`, `TEK`. Stable — everything refers to it. |
 | `title` | yes | Plain-language name, e.g. `People`, `Process`, `Technology`. |
-| `owner` | yes | Single accountable person for the whole initiative. |
+| `owner` | yes | The one person accountable for the whole initiative. A [person](#people). |
 | `timeframe` | yes | A year, optionally narrowed to a half or a quarter: `"2026"`, `"2026.H1"`, `"2026.Q3"`. **Quote it** — see [Gotchas](#gotchas). |
-| `review_cadence` | no | How often the work is looked at: `Weekly`, `Bi-Weekly`, `Quarterly`, `6 Months`, `Yearly`. |
+| `review_cadence` | no | How often the work is looked at: `Weekly`, `Bi-Weekly`, `Monthly`, `Quarterly`, `6 Months`, `Yearly`. |
 | `status` | yes | See [Status](#status). |
 | `description` | no | Free-form context. |
 | `objectives` | yes | List of Objectives. At least one. |
@@ -91,7 +97,7 @@ Top level has exactly two keys:
 | `title` | yes | The qualitative goal — what we want to improve or achieve. |
 | `description` | no | Brief but significant. Why this matters. |
 | `theme` | no | Cross-cutting tag used to group objectives across initiatives: `Shared capability model`, `AI-assisted SDLC`, `Architecture governance`. |
-| `owners` | no | List of names. Optional because it is usually the union of the Objective's Key Result owners; set it only when you want to state it explicitly. |
+| `owners` | no | List of [people](#people). Optional because it is usually the union of the Objective's Key Result owners; set it only when you want to state it explicitly. |
 | `status` | yes | See [Status](#status). |
 | `links` | no | List of `{title, url}` — Confluence pages, decision records, dashboards. |
 | `key_results` | yes | List of Key Results. At least one. |
@@ -124,16 +130,64 @@ A Key Result is addressed as `<SI id>.<objective id>.<KR id>` — `TEK.O1.KR2`,
 
 ### Owners (RACI)
 
-Four optional lists. `accountable` should name exactly one person — that is the
-point of RACI.
+Four optional lists of [people](#people). `accountable` should name exactly one
+person — that is the point of RACI.
+
+The last two are `consult` and `inform`, not the textbook's `consulted` and
+`informed`. A file using the older names is renamed on read, and the repair is
+reported.
 
 ```yaml
 owners:
-  accountable: [roberto.basile]     # owns the outcome, one person
-  responsible: [maria.rossi, luca.bianchi]   # does the work
-  consulted: [architecture-board]   # asked before decisions
-  informed: [cto]                   # told after decisions
+  # owns the outcome, one person
+  accountable:
+    - {name: roberto.basile, email: roberto.basile@example.com}
+  # does the work
+  responsible:
+    - {name: maria.rossi, email: maria.rossi@example.com}
+    - {name: luca.bianchi, email: luca.bianchi@example.com}
+  # asked before decisions
+  consult:
+    - {name: architecture-board}
+  # told after decisions
+  inform:
+    - {name: cto}
 ```
+
+---
+
+## People
+
+Anywhere a person is named — an initiative's `owner`, an objective's `owners`,
+any RACI role — the value is a mapping:
+
+| Field | Required | Description |
+|---|---|---|
+| `name` | yes | What to show. |
+| `email` | no | Where to reach them. |
+
+```yaml
+- {name: roberto.basile, email: roberto.basile@example.com}
+- {name: architecture-board}
+```
+
+The address is the durable identity: names get spelled three ways and change,
+addresses do not. Tooling comparing two entries should compare `email` where
+both have one, and fall back to `name`. It stays optional because you often know
+who owns something before you have looked up how to reach them, and a required
+field there collects rubbish — group aliases like `architecture-board` may never
+have one.
+
+A **bare name is accepted** in place of the mapping and upgraded to it:
+
+```yaml
+accountable: [roberto.basile]      # read as [{name: roberto.basile}]
+owner: roberto.basile              # read as {name: roberto.basile}
+```
+
+That is what makes a file written before people had addresses open without
+migration, and what keeps typing a name by hand practical. The repair is
+reported, as every repair is.
 
 ### Progress notes
 

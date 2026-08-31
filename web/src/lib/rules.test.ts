@@ -12,11 +12,18 @@ import {
 import {
   applyStatusRules,
   setField,
+  setInitiativeOwner,
   setOptionalField,
   setOwners,
   statusOptions,
 } from './edit.ts'
-import { collectPeople, collectPools, collectThemes, labelTint } from './labels.ts'
+import {
+  collectPeople,
+  collectPools,
+  collectThemes,
+  labelTint,
+  personLabel,
+} from './labels.ts'
 import {
   KR_KEYS,
   OBJECTIVE_KEYS,
@@ -31,21 +38,25 @@ const FILE = `version: 1
 strategic_initiatives:
   - id: TEK
     title: Technology
-    owner: roberto
+    owner: {name: roberto}
     timeframe: "2026"
     status: Not Started
     objectives:
       - id: O1
         title: First
-        owners: [elena]
+        owners:
+          - {name: elena}
         status: Not Started
         key_results:
           - id: KR1
             target_measure: A thing.
             target_date: Q3
             owners:
-              accountable: [roberto]
-              responsible: [maria, luca]
+              accountable:
+                - {name: roberto}
+              responsible:
+                - {name: maria}
+                - {name: luca}
             status: Not Started
             priority: High
             complexity: Medium
@@ -57,8 +68,10 @@ strategic_initiatives:
             target_measure: Another thing.
             target_date: "2026-09-30"
             owners:
-              accountable: [marco]
-              informed: [cto]
+              accountable:
+                - {name: marco}
+              inform:
+                - {name: cto}
             status: Not Started
             priority: Low
             complexity: Low
@@ -70,6 +83,10 @@ const objectiveStatus = (index: number) => [
   'objectives',
   index,
 ]
+
+/** The display names in a document, which is what the assertions care about. */
+const names = (doc: ReturnType<typeof parse>) =>
+  collectPeople(toData(doc)).map(personLabel)
 
 const keyResultStatus = (objective: number, keyResult: number) => [
   ...objectiveStatus(objective),
@@ -160,7 +177,7 @@ describe('timeframes', () => {
 // --------------------------------------------------------------------------
 describe('people', () => {
   test('collects every name in the file, deduplicated and sorted', () => {
-    expect(collectPeople(toData(parse(FILE)))).toEqual([
+    expect(collectPeople(toData(parse(FILE))).map(personLabel)).toEqual([
       'cto',
       'elena',
       'luca',
@@ -188,34 +205,52 @@ describe('people', () => {
    */
   test('a name added in one field becomes available everywhere', () => {
     const doc = parse(FILE)
-    expect(collectPeople(toData(doc))).not.toContain('sofia')
+    expect(names(doc)).not.toContain('sofia')
 
-    setOwners(doc, keyResultStatus(0, 0), 'consulted', ['sofia'])
-    expect(collectPeople(toData(doc))).toContain('sofia')
+    setOwners(doc, keyResultStatus(0, 0), 'consult', [{ name: 'sofia' }])
+    expect(names(doc)).toContain('sofia')
   })
 
   test('a name removed again stops being offered', () => {
     const doc = parse(FILE)
-    setOwners(doc, keyResultStatus(0, 0), 'consulted', ['sofia'])
-    setOwners(doc, keyResultStatus(0, 0), 'consulted', [])
+    setOwners(doc, keyResultStatus(0, 0), 'consult', [{ name: 'sofia' }])
+    setOwners(doc, keyResultStatus(0, 0), 'consult', [])
 
-    expect(collectPeople(toData(doc))).not.toContain('sofia')
+    expect(names(doc)).not.toContain('sofia')
   })
 
   test('a name still used elsewhere survives being removed from one field', () => {
     const doc = parse(FILE)
-    setOwners(doc, keyResultStatus(0, 0), 'consulted', ['sofia'])
-    setOwners(doc, keyResultStatus(1, 0), 'informed', ['cto', 'sofia'])
+    setOwners(doc, keyResultStatus(0, 0), 'consult', [{ name: 'sofia' }])
+    setOwners(doc, keyResultStatus(1, 0), 'inform', [
+      { name: 'cto' },
+      { name: 'sofia' },
+    ])
 
-    setOwners(doc, keyResultStatus(0, 0), 'consulted', [])
+    setOwners(doc, keyResultStatus(0, 0), 'consult', [])
 
-    expect(collectPeople(toData(doc))).toContain('sofia')
+    expect(names(doc)).toContain('sofia')
   })
 
   test('the initiative owner draws on the same pool', () => {
     const doc = parse(FILE)
-    setField(doc, ['strategic_initiatives', 0], 'owner', 'sofia', SI_KEYS)
-    expect(collectPeople(toData(doc))).toContain('sofia')
+    setInitiativeOwner(doc, ['strategic_initiatives', 0], { name: 'sofia' })
+    expect(names(doc)).toContain('sofia')
+  })
+
+  test('the same address written with two names counts once', () => {
+    const doc = parse(FILE)
+    setOwners(doc, keyResultStatus(0, 0), 'consult', [
+      { name: 'Sofia Ricci', email: 'sofia@example.com' },
+    ])
+    setOwners(doc, keyResultStatus(1, 0), 'inform', [
+      { name: 'sofia.ricci', email: 'sofia@example.com' },
+    ])
+
+    const matching = collectPeople(toData(doc)).filter(
+      (person) => person.email === 'sofia@example.com',
+    )
+    expect(matching).toHaveLength(1)
   })
 })
 
@@ -264,10 +299,16 @@ describe('themes', () => {
     const doc = parse(FILE)
     setOptionalField(doc, objectiveStatus(0), 'theme', 'Governance', OBJECTIVE_KEYS)
 
-    expect(collectPools(toData(doc))).toEqual({
-      people: ['cto', 'elena', 'luca', 'marco', 'maria', 'roberto'],
-      themes: ['Governance'],
-    })
+    const pools = collectPools(toData(doc))
+    expect(pools.people.map(personLabel)).toEqual([
+      'cto',
+      'elena',
+      'luca',
+      'marco',
+      'maria',
+      'roberto',
+    ])
+    expect(pools.themes).toEqual(['Governance'])
   })
 })
 

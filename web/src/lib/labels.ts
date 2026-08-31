@@ -12,38 +12,59 @@
  * offered, with nothing to clean up.
  */
 
-import { type OkrFile, RACI_ROLES } from './okr.ts'
+import { type OkrFile, type Person, RACI_ROLES } from './okr.ts'
 
 /** The values offered by the pickers, for one loaded file. */
 export interface Pools {
-  people: string[]
+  people: Person[]
   themes: string[]
+}
+
+/**
+ * How a person is identified. The address where there is one, since that is
+ * what survives a name being spelled differently; the name otherwise.
+ */
+export function personKey(person: Person | undefined): string {
+  return (person?.email?.trim() || person?.name?.trim() || '').toLowerCase()
+}
+
+/** How a person is shown. */
+export function personLabel(person: Person | undefined): string {
+  return person?.name?.trim() || person?.email?.trim() || '(unnamed)'
 }
 
 function sorted(values: Set<string>): string[] {
   return [...values].sort((a, b) => a.localeCompare(b))
 }
 
-/** Every person named in the file: initiative owners, objective owners, RACI. */
-export function collectPeople(file: OkrFile | null): string[] {
-  const names = new Set<string>()
-  const add = (name: string | undefined) => {
-    const trimmed = name?.trim()
-    if (trimmed) names.add(trimmed)
+/**
+ * Everyone named in the file: initiative owners, objective owners, RACI.
+ *
+ * Deduplicated by identity, so the same address written with two spellings of
+ * a name collapses to one entry — the first spelling met, which is arbitrary
+ * but stable within a read.
+ */
+export function collectPeople(file: OkrFile | null): Person[] {
+  const found = new Map<string, Person>()
+  const add = (person: Person | undefined) => {
+    const key = personKey(person)
+    if (key && person && !found.has(key)) found.set(key, person)
   }
 
   for (const initiative of file?.strategic_initiatives ?? []) {
     add(initiative.owner)
     for (const objective of initiative.objectives ?? []) {
-      for (const name of objective.owners ?? []) add(name)
+      for (const person of objective.owners ?? []) add(person)
       for (const keyResult of objective.key_results ?? []) {
         for (const role of RACI_ROLES) {
-          for (const name of keyResult.owners?.[role] ?? []) add(name)
+          for (const person of keyResult.owners?.[role] ?? []) add(person)
         }
       }
     }
   }
-  return sorted(names)
+  return [...found.values()].sort((a, b) =>
+    personLabel(a).localeCompare(personLabel(b)),
+  )
 }
 
 /** Every theme used in the file. Themes group objectives across initiatives. */

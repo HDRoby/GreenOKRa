@@ -13,6 +13,7 @@ import type { Editor } from './editor.ts'
 import { AddButton, EnumSelect, ProgressBar, Reference, TextField } from './fields.tsx'
 import { LinkRow } from './link-row.tsx'
 import { LabelPicker } from './label-picker.tsx'
+import { PersonPicker } from './person-picker.tsx'
 import { KeyResultRow } from './key-result.tsx'
 
 export function ObjectiveCard({
@@ -84,13 +85,14 @@ export function ObjectiveCard({
             </span>
             <span className="flex items-center gap-1.5">
               owners
-              <LabelPicker
-                values={objective.owners ?? []}
+              <PersonPicker
+                people={objective.owners ?? []}
                 known={pools.people}
                 multiple
                 label={`${reference} owners`}
                 highlight={person}
-                onChange={(names) => editor.setObjectiveOwners(path, names)}
+                onChange={(chosen) => editor.setObjectiveOwners(path, chosen)}
+                onEditPerson={editor.editPerson}
               />
             </span>
           </div>
@@ -122,6 +124,14 @@ export function ObjectiveCard({
       </div>
 
       <div>
+        {/* A quiet section label, so the rows below are not left unexplained
+            once the objective's own detail is above them. */}
+        <h3
+          className="border-t border-line/60 px-4 pt-2.5 pb-1 text-[11px]
+            font-medium tracking-wide text-ink-faint uppercase"
+        >
+          Key Results
+        </h3>
         {keyResults.map(({ item: keyResult, index }) => (
           <KeyResultRow
             key={keyResult.id ?? index}

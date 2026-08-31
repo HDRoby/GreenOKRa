@@ -4,7 +4,13 @@ import { Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { timeframeGroups } from '@/lib/dates.ts'
-import { displayProgress, formatProgress } from '@/lib/okr.ts'
+import {
+  STATUSES,
+  canonical,
+  displayProgress,
+  formatProgress,
+  statusProgress,
+} from '@/lib/okr.ts'
 
 import { Dropdown, type DropdownOption, toOptions } from './dropdown.tsx'
 
@@ -103,22 +109,37 @@ export function TextField({
  * the stylesheet. Keeping them in one entry is what stops a tab and a pill
  * disagreeing about what colour a status is.
  */
-const TONES: Record<string, { pill: string; text: string }> = {
+const TONES: Record<string, { pill: string; text: string; bar?: string }> = {
   // The status ladder.
-  'Not Started': { pill: 'text-idle border-idle/40 bg-idle/10', text: 'text-idle' },
-  Started: { pill: 'text-begun border-begun/40 bg-begun/10', text: 'text-begun' },
+  'Not Started': {
+    pill: 'text-idle border-idle/40 bg-idle/10',
+    text: 'text-idle',
+    bar: 'bg-idle',
+  },
+  Started: {
+    pill: 'text-begun border-begun/40 bg-begun/10',
+    text: 'text-begun',
+    bar: 'bg-begun',
+  },
   'In Progress': {
     pill: 'text-active border-active/40 bg-active/10',
     text: 'text-active',
+    bar: 'bg-active',
   },
   'In Completion': {
     pill: 'text-closing border-closing/40 bg-closing/10',
     text: 'text-closing',
+    bar: 'bg-closing',
   },
-  Completed: { pill: 'text-done border-done/40 bg-done/10', text: 'text-done' },
+  Completed: {
+    pill: 'text-done border-done/40 bg-done/10',
+    text: 'text-done',
+    bar: 'bg-done',
+  },
   Aborted: {
     pill: 'text-dropped border-dropped/40 bg-dropped/10',
     text: 'text-dropped',
+    bar: 'bg-dropped',
   },
   // Priority and complexity, which share their values.
   Blocker: {
@@ -147,6 +168,49 @@ function toneFor(value: string): string {
 /** Just the colour, for places that show the word rather than a pill. */
 export function textToneFor(value: string): string {
   return TONES[value]?.text ?? 'text-ink-muted'
+}
+
+/**
+ * The status as a bar: how far along, in the status's own colour.
+ *
+ * On a list of rows a word makes the right-hand edge ragged — "In Completion"
+ * is three times the width of "Started" — so nothing lines up down the page. A
+ * fixed-width bar carries the same two signals and keeps the column straight.
+ */
+export function StatusBar({
+  status,
+  width = 'w-14',
+}: {
+  status: string | undefined
+  width?: string
+}) {
+  const value = canonical(status, STATUSES)
+  if (value === null) {
+    return <span aria-hidden className={`${width} shrink-0`} />
+  }
+
+  const progress = statusProgress(status)
+  // Aborted has no percentage at all, so the track carries the colour instead
+  // of a fill — which also keeps it distinct from an empty 0%.
+  const aborted = progress === null
+  const label = aborted ? value : `${value} — ${progress}%`
+
+  return (
+    <span
+      title={label}
+      aria-label={label}
+      className={`${width} h-1.5 shrink-0 overflow-hidden rounded-full
+        ${aborted ? 'bg-dropped/35' : 'bg-line'}`}
+    >
+      {!aborted && (
+        <span
+          className={`block h-full rounded-full transition-[width] duration-300
+            ${TONES[value]?.bar ?? 'bg-accent'}`}
+          style={{ width: `${progress}%` }}
+        />
+      )}
+    </span>
+  )
 }
 
 /** The pill an enum value becomes, used both closed and in the list. */

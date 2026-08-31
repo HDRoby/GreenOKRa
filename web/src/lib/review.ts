@@ -16,12 +16,14 @@ import { type Cadence, CADENCES, type KeyResult, STATUSES, canonical } from './o
  * Days between reviews.
  *
  * `Bi-Weekly` is every two weeks, the usual reading in a planning context, not
- * twice a week. Quarters are 13 weeks and half years 26, which keeps them exact
- * multiples of a week rather than drifting with month lengths.
+ * twice a week. The longer periods are the calendar's average length rather
+ * than any particular month or quarter: a review is late by roughly a month,
+ * not by a month that happens to have 31 days in it.
  */
 const INTERVAL_DAYS: Record<Cadence, number> = {
   Weekly: 7,
   'Bi-Weekly': 14,
+  Monthly: 30,
   Quarterly: 91,
   '6 Months': 182,
   Yearly: 365,

@@ -21,9 +21,11 @@ import {
   removeLink,
   setField,
   setNoteField,
+  setInitiativeOwner,
   setObjectiveOwners,
   setOptionalField,
   setOwners,
+  updatePerson,
   sortNotes,
 } from '@/lib/edit.ts'
 import {
@@ -44,6 +46,7 @@ import {
   KR_KEYS,
   OBJECTIVE_KEYS,
   type OkrFile,
+  type Person,
   type Report,
   SI_KEYS,
   parse,
@@ -128,9 +131,14 @@ export default function Page() {
             ? setField(doc, path, key, value, KR_KEYS)
             : setOptionalField(doc, path, key, value, KR_KEYS),
         ),
-      setOwners: (path, role, names) => commit((doc) => setOwners(doc, path, role, names)),
-      setObjectiveOwners: (path, names) =>
-        commit((doc) => setObjectiveOwners(doc, path, names)),
+      setOwners: (path, role, people) =>
+        commit((doc) => setOwners(doc, path, role, people)),
+      setObjectiveOwners: (path, people) =>
+        commit((doc) => setObjectiveOwners(doc, path, people)),
+      setInitiativeOwner: (path, person) =>
+        commit((doc) => setInitiativeOwner(doc, path, person)),
+      editPerson: (identity, person) =>
+        commit((doc) => updatePerson(doc, identity, person)),
 
       addNote: (path, date, note) =>
         commit((doc) => addProgressNote(doc, path, date, note)),
@@ -353,7 +361,7 @@ function EditorHeader({
   file: OpenedFile | null
   dirty: boolean
   report: Report | null
-  people: string[]
+  people: Person[]
   person: PersonFilter
   onPerson: (person: PersonFilter) => void
   onOpen: () => void

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import type { KeyResult } from './okr.ts'
+import { CADENCES, type KeyResult } from './okr.ts'
 import {
   cadenceOf,
   daysBetween,
@@ -21,13 +21,14 @@ describe('cadence', () => {
     expect(cadenceOf('Weekly')).toBe('Weekly')
     expect(cadenceOf('bi-weekly')).toBe('Bi-Weekly')
     expect(cadenceOf('BI_WEEKLY')).toBe('Bi-Weekly')
+    expect(cadenceOf('Monthly')).toBe('Monthly')
     expect(cadenceOf('6 months')).toBe('6 Months')
     expect(cadenceOf('6-Months')).toBe('6 Months')
   })
 
   test('rejects anything else', () => {
     expect(cadenceOf('Monthly review, quarterly sponsor review')).toBeNull()
-    expect(cadenceOf('Monthly')).toBeNull()
+    expect(cadenceOf('Fortnightly')).toBeNull()
     expect(cadenceOf(undefined)).toBeNull()
   })
 })
@@ -91,10 +92,28 @@ describe('freshness', () => {
 
   test('scales with the cadence', () => {
     const twoMonthsAgo = withNotes(['2026-07-01'])
-    // 61 days: overdue weekly, but comfortably inside a quarter.
+    // 61 days: overdue weekly and monthly, comfortably inside a quarter.
     expect(reviewStatus(twoMonthsAgo, 'Weekly', TODAY).state).toBe('stale')
+    expect(reviewStatus(twoMonthsAgo, 'Monthly', TODAY).state).toBe('stale')
     expect(reviewStatus(twoMonthsAgo, 'Quarterly', TODAY).state).toBe('fresh')
     expect(reviewStatus(twoMonthsAgo, 'Yearly', TODAY).state).toBe('fresh')
+  })
+
+  test('a month is thirty days, not four weeks', () => {
+    // 29 days ago is still inside a monthly interval; 4 weeks would not be.
+    expect(reviewStatus(withNotes(['2026-08-02']), 'Monthly', TODAY).state).toBe('fresh')
+    // 31 days ago has passed it.
+    expect(reviewStatus(withNotes(['2026-07-31']), 'Monthly', TODAY).state).toBe(
+      'slipping',
+    )
+  })
+
+  test('every cadence has an interval, so none silently does nothing', () => {
+    for (const cadence of CADENCES) {
+      const review = reviewStatus(withNotes(['2020-01-01']), cadence, TODAY)
+      expect(review.intervalDays).toBeGreaterThan(0)
+      expect(review.state).toBe('stale')
+    }
   })
 
   test('reports never reviewed rather than guessing', () => {
@@ -120,9 +139,11 @@ describe('what is exempt', () => {
     }
   })
 
-  test('an initiative with no cadence set', () => {
+  test('an initiative with no cadence set, or one nobody recognises', () => {
     expect(reviewStatus(withNotes(['2020-01-01']), undefined, TODAY).state).toBe('exempt')
-    expect(reviewStatus(withNotes(['2020-01-01']), 'Monthly', TODAY).state).toBe('exempt')
+    expect(reviewStatus(withNotes(['2020-01-01']), 'Fortnightly', TODAY).state).toBe(
+      'exempt',
+    )
   })
 })
 

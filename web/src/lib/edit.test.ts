@@ -11,11 +11,13 @@ import {
   removeLink,
   removeNote,
   setField,
+  setInitiativeOwner,
   setNoteField,
   setObjectiveOwners,
   setOptionalField,
   setOwners,
   sortNotes,
+  updatePerson,
 } from './edit.ts'
 import {
   KR_KEYS,
@@ -34,7 +36,7 @@ strategic_initiatives:
   # a comment that must survive every edit
   - id: TEK
     title: Technology
-    owner: roberto
+    owner: {name: roberto}
     timeframe: "2026"
     status: In Progress
     description: >
@@ -49,7 +51,8 @@ strategic_initiatives:
             target_measure: A measurable thing reaches 100%.
             target_date: Q3
             owners:
-              accountable: [roberto]
+              accountable:
+                - {name: roberto}
             status: In Progress
             priority: High
             complexity: Medium
@@ -58,7 +61,8 @@ strategic_initiatives:
             target_measure: Dropped work.
             target_date: Q3
             owners:
-              accountable: [roberto]
+              accountable:
+                - {name: roberto}
             status: Aborted
             priority: Low
             complexity: Low
@@ -120,16 +124,23 @@ describe('setOptionalField', () => {
 })
 
 describe('owners', () => {
-  test('writes a RACI role as a flow list', () => {
+  test('writes each person on one line, in a block list', () => {
     const doc = parse(BASE)
-    setOwners(doc, keyResult, 'responsible', ['maria', 'luca'])
-    expect(stringify(doc)).toContain('responsible: [maria, luca]')
+    setOwners(doc, keyResult, 'responsible', [
+      { name: 'maria', email: 'maria@example.com' },
+      { name: 'luca' },
+    ])
+
+    const text = stringify(doc)
+    expect(text).toContain('- {name: maria, email: maria@example.com}')
+    // No email written where there is none, rather than an empty key.
+    expect(text).toContain('- {name: luca}')
     expectStillSound(doc)
   })
 
   test('removes a role when its list is emptied', () => {
     const doc = parse(BASE)
-    setOwners(doc, keyResult, 'responsible', ['maria'])
+    setOwners(doc, keyResult, 'responsible', [{ name: 'maria' }])
     setOwners(doc, keyResult, 'responsible', [])
     expect(stringify(doc)).not.toContain('responsible')
     expectStillSound(doc)
@@ -137,9 +148,80 @@ describe('owners', () => {
 
   test('writes objective owners in documented position', () => {
     const doc = parse(BASE)
-    setObjectiveOwners(doc, objective, ['roberto', 'maria'])
-    expect(stringify(doc)).toContain('owners: [roberto, maria]')
+    setObjectiveOwners(doc, objective, [{ name: 'roberto' }, { name: 'maria' }])
+    expect(stringify(doc)).toContain('owners:')
     expectStillSound(doc)
+  })
+
+  test('sets and clears the single owner of an initiative', () => {
+    const doc = parse(BASE)
+    setInitiativeOwner(doc, initiative, {
+      name: 'maria',
+      email: 'maria@example.com',
+    })
+    expect(stringify(doc)).toContain('owner: {name: maria, email: maria@example.com}')
+
+    setInitiativeOwner(doc, initiative, null)
+    expect(stringify(doc)).not.toContain('owner:')
+  })
+})
+
+/**
+ * An address is a person's identity, so correcting one has to reach every
+ * place they appear — otherwise fixing it here leaves it wrong in nineteen
+ * other key results.
+ */
+describe('updatePerson', () => {
+  const withPeople = () => {
+    const doc = parse(BASE)
+    setInitiativeOwner(doc, initiative, { name: 'maria' })
+    setObjectiveOwners(doc, objective, [{ name: 'maria' }, { name: 'luca' }])
+    setOwners(doc, keyResult, 'responsible', [{ name: 'maria' }])
+    setOwners(doc, keyResultPath(0, 0, 1), 'consult', [{ name: 'maria' }])
+    return doc
+  }
+
+  test('reaches every occurrence, at every level', () => {
+    const doc = withPeople()
+
+    const changed = updatePerson(doc, 'maria', {
+      name: 'Maria Rossi',
+      email: 'maria.rossi@example.com',
+    })
+
+    // Initiative owner, objective owners, and two key results.
+    expect(changed).toBe(4)
+    const text = stringify(doc)
+    expect(text).not.toContain('{name: maria}')
+    expect(text.match(/maria\.rossi@example\.com/g)).toHaveLength(4)
+    expectStillSound(doc)
+  })
+
+  test('leaves everybody else alone', () => {
+    const doc = withPeople()
+    updatePerson(doc, 'maria', { name: 'Maria Rossi' })
+    expect(stringify(doc)).toContain('{name: luca}')
+  })
+
+  test('matches on identity, which is what an address is for', () => {
+    const doc = parse(BASE)
+    setOwners(doc, keyResult, 'responsible', [
+      { name: 'spelled one way', email: 'shared@example.com' },
+    ])
+    setOwners(doc, keyResultPath(0, 0, 1), 'consult', [
+      { name: 'spelled another', email: 'shared@example.com' },
+    ])
+
+    // Both entries are the same person, however their name was typed.
+    expect(updatePerson(doc, 'shared@example.com', {
+      name: 'Agreed Spelling',
+      email: 'shared@example.com',
+    })).toBe(2)
+    expect(stringify(doc)).not.toContain('spelled')
+  })
+
+  test('reports nothing changed when nobody matches', () => {
+    expect(updatePerson(withPeople(), 'nobody@example.com', { name: 'x' })).toBe(0)
   })
 })
 
@@ -367,12 +449,12 @@ describe('a full editing session', () => {
     setField(doc, objective, 'title', 'Make the SDLC AI-assisted', OBJECTIVE_KEYS)
     setOptionalField(doc, objective, 'theme', 'AI-assisted SDLC', OBJECTIVE_KEYS)
     setField(doc, keyResult, 'status', 'Completed', KR_KEYS)
-    setOwners(doc, keyResult, 'informed', ['cto'])
+    setOwners(doc, keyResult, 'inform', [{ name: 'cto' }])
     addProgressNote(doc, keyResult, '2026-08-31', 'Hit the target.')
     addKeyResult(doc, objective)
     setField(doc, keyResultPath(0, 0, 2), 'target_measure', 'Something new.', KR_KEYS)
     setField(doc, keyResultPath(0, 0, 2), 'target_date', 'Q4', KR_KEYS)
-    setOwners(doc, keyResultPath(0, 0, 2), 'accountable', ['roberto'])
+    setOwners(doc, keyResultPath(0, 0, 2), 'accountable', [{ name: 'roberto' }])
 
     const report = validate(doc)
     expect(report.errors).toEqual([])

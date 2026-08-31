@@ -13,7 +13,7 @@ import {
   visibleObjectives,
   withIndices,
 } from './filter.ts'
-import { collectPeople } from './labels.ts'
+import { collectPeople, personKey, personLabel } from './labels.ts'
 import { type Initiative, type OkrFile, parse, toData } from './okr.ts'
 
 /**
@@ -24,20 +24,22 @@ const FILE = `version: 1
 strategic_initiatives:
   - id: PEP
     title: People
-    owner: roberto
+    owner: {name: roberto}
     timeframe: "2026"
     status: In Progress
     objectives:
       - id: O1
         title: Owned by elena
-        owners: [elena]
+        owners:
+          - {name: elena}
         status: In Progress
         key_results:
           - id: KR1
             target_measure: One.
             target_date: Q1
             owners:
-              accountable: [roberto]
+              accountable:
+                - {name: roberto}
             status: In Progress
             priority: High
             complexity: Low
@@ -45,13 +47,14 @@ strategic_initiatives:
             target_measure: Two.
             target_date: Q2
             owners:
-              accountable: [luca]
+              accountable:
+                - {name: luca}
             status: Not Started
             priority: Low
             complexity: Low
   - id: PRO
     title: Process
-    owner: roberto
+    owner: {name: roberto}
     timeframe: "2026"
     status: In Progress
     objectives:
@@ -63,7 +66,8 @@ strategic_initiatives:
             target_measure: Three.
             target_date: Q3
             owners:
-              accountable: [luca]
+              accountable:
+                - {name: luca}
             status: Not Started
             priority: Low
             complexity: Low
@@ -75,14 +79,16 @@ strategic_initiatives:
             target_measure: Four.
             target_date: Q4
             owners:
-              accountable: [luca]
-              consulted: [maria]
+              accountable:
+                - {name: luca}
+              consult:
+                - {name: maria}
             status: Not Started
             priority: Low
             complexity: Low
   - id: TEK
     title: Technology
-    owner: marco
+    owner: {name: marco}
     timeframe: "2026"
     status: Not Started
     objectives:
@@ -94,7 +100,8 @@ strategic_initiatives:
             target_measure: Five.
             target_date: Q1
             owners:
-              accountable: [luca]
+              accountable:
+                - {name: luca}
             status: Not Started
             priority: Low
             complexity: Low
@@ -122,8 +129,12 @@ describe('involvement', () => {
     const keyResult = find('PRO').objectives?.[1]?.key_results?.[0]
     // maria is consulted on this one, and nothing else.
     expect(keyResultInvolves(keyResult ?? {}, 'maria')).toBe(false)
-    expect(keyResultInvolves({ owners: { informed: ['cto'] } }, 'cto')).toBe(false)
-    expect(keyResultInvolves({ owners: { responsible: ['cto'] } }, 'cto')).toBe(true)
+    expect(keyResultInvolves({ owners: { inform: [{ name: 'cto' }] } }, 'cto')).toBe(
+      false,
+    )
+    expect(
+      keyResultInvolves({ owners: { responsible: [{ name: 'cto' }] } }, 'cto'),
+    ).toBe(true)
   })
 
   test('an objective counts its own owners and its key results', () => {
@@ -147,18 +158,25 @@ describe('who the filter offers', () => {
    * match anything would be a dead choice in the list.
    */
   test('lists only people who own work somewhere', () => {
-    expect(filterablePeople(data)).toEqual(['elena', 'luca', 'marco', 'roberto'])
+    expect(filterablePeople(data).map(personLabel)).toEqual([
+      'elena',
+      'luca',
+      'marco',
+      'roberto',
+    ])
   })
 
   test('leaves out anyone who is only consulted or informed', () => {
     // maria is consulted on PRO.O2.KR1 and appears nowhere else.
-    expect(collectPeople(data)).toContain('maria')
-    expect(filterablePeople(data)).not.toContain('maria')
+    expect(collectPeople(data).map(personLabel)).toContain('maria')
+    expect(filterablePeople(data).map(personLabel)).not.toContain('maria')
   })
 
   test('every offered name actually matches something', () => {
     for (const person of filterablePeople(data)) {
-      expect(visibleInitiatives(initiatives, person).length).toBeGreaterThan(0)
+      expect(visibleInitiatives(initiatives, personKey(person)).length).toBeGreaterThan(
+        0,
+      )
     }
   })
 

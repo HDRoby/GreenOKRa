@@ -3,9 +3,11 @@
 import { Users } from 'lucide-react'
 
 import { EVERYONE, type PersonFilter } from '@/lib/filter.ts'
-import { labelTint } from '@/lib/labels.ts'
+import { personKey, personLabel } from '@/lib/labels.ts'
+import type { Person } from '@/lib/okr.ts'
 
 import { Dropdown, type DropdownOption } from './dropdown.tsx'
+import { CHIP_PLAIN } from './person-picker.tsx'
 
 const ALL = 'Everyone'
 
@@ -26,23 +28,24 @@ export function PersonFilterSelect({
   person,
   onChange,
 }: {
-  people: string[]
+  people: Person[]
   person: PersonFilter
   onChange: (person: PersonFilter) => void
 }) {
   const filtering = person !== EVERYONE
-  // Keep a name selectable even if it has just lost its last owning role, so
-  // the control never displays something that is not in its own list.
-  const options = filtering && !people.includes(person) ? [person, ...people] : people
+  const chosen = people.find((candidate) => personKey(candidate) === person)
+  // Keep the selection listed even if that person has just lost their last
+  // owning role, so the control never displays something absent from its list.
+  const listed =
+    filtering && !chosen ? [{ name: person }, ...people] : people
 
   const peopleOptions: DropdownOption[] = [
     { value: ALL, label: ALL },
-    ...options.map((name) => ({
-      value: name,
-      label: name,
+    ...listed.map((candidate) => ({
+      value: personKey(candidate),
+      label: personLabel(candidate),
       // The same chip the person wears throughout the file.
-      chipClassName: 'inline-block rounded-full border px-2 py-0.5 text-xs',
-      chipStyle: labelTint(name),
+      chipClassName: CHIP_PLAIN,
     })),
   ]
 
@@ -56,15 +59,18 @@ export function PersonFilterSelect({
         onChange={(next) => onChange(next === ALL ? EVERYONE : next)}
         label={WHAT_IT_DOES}
         icon={<Users size={11} className="shrink-0 opacity-70" />}
-        triggerStyle={filtering ? labelTint(person, true) : undefined}
         triggerClassName={`cursor-pointer rounded-full border py-0.5 pr-1.5 pl-2 text-xs
           focus:outline-none focus:ring-1 focus:ring-accent-dim
-          ${filtering ? 'font-medium' : 'border-line bg-surface-raised text-ink-muted'}`}
+          ${
+            filtering
+              ? 'border-accent bg-accent-dim/40 font-medium text-ink'
+              : 'border-line bg-surface-raised text-ink-muted'
+          }`}
       />
 
       <span>
         {filtering
-          ? `— only what ${person} owns, is accountable or responsible for`
+          ? `— only what ${personLabel(chosen ?? { name: person })} owns, is accountable or responsible for`
           : '— everything in the file'}
       </span>
     </div>

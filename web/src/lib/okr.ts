@@ -15,6 +15,7 @@
 
 import {
   Document,
+  Pair,
   Scalar,
   YAMLMap,
   YAMLSeq,
@@ -51,6 +52,7 @@ export const COMPLEXITIES = ['Very High', 'High', 'Medium', 'Low'] as const
 export const CADENCES = [
   'Weekly',
   'Bi-Weekly',
+  'Monthly',
   'Quarterly',
   '6 Months',
   'Yearly',
@@ -59,9 +61,15 @@ export const CADENCES = [
 export const RACI_ROLES = [
   'accountable',
   'responsible',
-  'consulted',
-  'informed',
+  'consult',
+  'inform',
 ] as const
+
+/** What those last two used to be called. Renamed on read. */
+const RENAMED_ROLES: Record<string, string> = {
+  consulted: 'consult',
+  informed: 'inform',
+}
 
 export type Status = (typeof STATUSES)[number]
 export type Priority = (typeof PRIORITIES)[number]
@@ -123,6 +131,7 @@ export const KR_KEYS = [
   'progress_notes',
 ] as const
 const LINK_KEYS = ['title', 'url'] as const
+const PERSON_KEYS = ['name', 'email'] as const
 const NOTE_KEYS = ['date', 'note'] as const
 
 // --------------------------------------------------------------------------
@@ -140,11 +149,26 @@ export interface ProgressNote {
   note?: string
 }
 
+/**
+ * Somebody named on the work: a name to show, and optionally an address to
+ * reach them at.
+ *
+ * The address is the durable identity — names get spelled three ways and
+ * change with marriages — so tooling that needs to reach a person should key on
+ * `email` where there is one. It stays optional because you often know who owns
+ * something before you have looked up how to contact them, and a required
+ * field there would just get filled with rubbish.
+ */
+export interface Person {
+  name?: string
+  email?: string
+}
+
 export interface Owners {
-  accountable?: string[]
-  responsible?: string[]
-  consulted?: string[]
-  informed?: string[]
+  accountable?: Person[]
+  responsible?: Person[]
+  consult?: Person[]
+  inform?: Person[]
 }
 
 export interface KeyResult {
@@ -163,7 +187,7 @@ export interface Objective {
   title?: string
   description?: string
   theme?: string
-  owners?: string[]
+  owners?: Person[]
   status?: string
   links?: Link[]
   key_results?: KeyResult[]
@@ -172,7 +196,7 @@ export interface Objective {
 export interface Initiative {
   id?: string
   title?: string
-  owner?: string
+  owner?: Person
   timeframe?: string
   review_cadence?: string
   status?: string
@@ -471,6 +495,98 @@ function identifier(
   return value
 }
 
+/** Permissive on purpose: this checks for an obvious mistake, not RFC 5322. */
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** A person as a one-line flow mapping, which is how they are written. */
+function personNode(name: string): YAMLMap {
+  const map = new YAMLMap()
+  map.flow = true
+  map.add(new Pair(new Scalar('name'), new Scalar(name)))
+  return map
+}
+
+/** Check one person entry, upgrading a bare name into the mapping shape. */
+function personEntry(node: unknown, path: string, report: Report): YAMLMap | null {
+  if (!isMap(node)) {
+    report.error(`${path}: expected a name and optional email, found ${describe(node)}`)
+    return null
+  }
+  unknownKeys(node, PERSON_KEYS, path, report)
+  textField(node, 'name', path, report)
+  const email = textField(node, 'email', path, report, false)
+  if (email !== null && !EMAIL.test(email)) {
+    report.error(`${path}.email: '${email}' is not an email address`)
+  }
+  return node
+}
+
+/**
+ * A list of people, accepting a bare name in place of the mapping.
+ *
+ * `accountable: [roberto]` becomes `accountable: [{ name: roberto }]`, reported
+ * as a repair. Every file written before people had addresses therefore opens
+ * and upgrades itself, and typing a name by hand still works.
+ */
+function personList(
+  map: YAMLMap,
+  key: string,
+  path: string,
+  report: Report,
+  required = true,
+): Person[] {
+  if (absent(map, key, path, report, required)) return []
+  let node = map.get(key, true)
+
+  // A single bare name where a list belongs.
+  if (isScalar(node) && typeof node.value === 'string') {
+    const solo = node.value.trim()
+    const wrapped = new YAMLSeq()
+    wrapped.add(personNode(solo))
+    map.set(key, wrapped)
+    report.fix(`${path}.${key}: wrapped '${solo}' in a list`)
+    node = map.get(key, true)
+  }
+
+  if (!isSeq(node)) {
+    report.error(`${path}.${key}: expected a list of people`)
+    return []
+  }
+
+  const people: Person[] = []
+  node.items.forEach((item, index) => {
+    const entryPath = `${path}.${key}[${index}]`
+    if (isScalar(item) && typeof item.value === 'string') {
+      const name = item.value.trim()
+      node.items[index] = personNode(name)
+      report.fix(`${entryPath}: '${name}' given the name/email shape`)
+    }
+    const checked = personEntry(node.items[index], entryPath, report)
+    if (checked) people.push(checked.toJSON() as Person)
+  })
+  return people
+}
+
+/** One person, where the field holds a single one rather than a list. */
+function personValue(
+  map: YAMLMap,
+  key: string,
+  path: string,
+  report: Report,
+  required = true,
+): Person | null {
+  if (absent(map, key, path, report, required)) return null
+  const node = map.get(key, true)
+
+  if (isScalar(node) && typeof node.value === 'string') {
+    const name = node.value.trim()
+    map.set(key, personNode(name))
+    report.fix(`${path}.${key}: '${name}' given the name/email shape`)
+  }
+  const checked = personEntry(map.get(key, true), `${path}.${key}`, report)
+  return checked ? (checked.toJSON() as Person) : null
+}
+
 function nameList(
   map: YAMLMap,
   key: string,
@@ -600,7 +716,7 @@ function validateInitiative(
   const prefix = initiativeId ?? path
 
   textField(initiative, 'title', prefix, report)
-  textField(initiative, 'owner', prefix, report)
+  personValue(initiative, 'owner', prefix, report)
   labelField(initiative, 'timeframe', prefix, report)
   enumField(initiative, 'review_cadence', CADENCES, prefix, report, false)
   textField(initiative, 'description', prefix, report, false)
@@ -655,7 +771,7 @@ function validateObjective(
   textField(objective, 'theme', prefix, report, false)
   enumField(objective, 'status', STATUSES, prefix, report)
   if (objective.has('owners')) {
-    nameList(objective, 'owners', prefix, report, false)
+    personList(objective, 'owners', prefix, report, false)
   }
   validateLinks(objective, prefix, report)
 
@@ -733,6 +849,23 @@ function validateKeyResult(
   return keyResultId
 }
 
+/**
+ * Rename `consulted` and `informed` to `consult` and `inform`.
+ *
+ * Repaired rather than rejected, so a file written under the old names opens
+ * and updates itself. The key is renamed in place, which keeps the people under
+ * it and the position of the field.
+ */
+function renameLegacyRoles(owners: YAMLMap, path: string, report: Report): void {
+  for (const pair of owners.items) {
+    const key = isScalar(pair.key) ? String(pair.key.value) : String(pair.key)
+    const renamed = RENAMED_ROLES[key]
+    if (!renamed) continue
+    pair.key = new Scalar(renamed)
+    report.fix(`${path}: '${key}' renamed to '${renamed}'`)
+  }
+}
+
 function validateOwners(keyResult: YAMLMap, path: string, report: Report): void {
   if (absent(keyResult, 'owners', path, report, true)) return
   const owners = keyResult.get('owners', true)
@@ -742,13 +875,14 @@ function validateOwners(keyResult: YAMLMap, path: string, report: Report): void 
     )
     return
   }
+  renameLegacyRoles(owners, `${path}.owners`, report)
   unknownKeys(owners, RACI_ROLES, `${path}.owners`, report)
 
-  const named = new Map<string, string[]>()
+  const named = new Map<string, Person[]>()
   for (const role of RACI_ROLES) {
     if (!owners.has(role)) continue
     if (absent(owners, role, `${path}.owners`, report, false)) continue
-    named.set(role, nameList(owners, role, `${path}.owners`, report, false))
+    named.set(role, personList(owners, role, `${path}.owners`, report, false))
   }
 
   const total = [...named.values()].reduce((sum, list) => sum + list.length, 0)

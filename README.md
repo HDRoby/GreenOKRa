@@ -113,7 +113,10 @@ You keep the files; git is the history.
 - **Save** back to the file you opened, with `⌘S`
 
 Owners appear as coloured chips, one colour per person, so the same name is
-recognisable at a glance across the file. Priority and complexity share their
+recognisable at a glance across the file. Each carries a name and, behind the
+pencil, an email — the address being the identity that survives a name being
+spelled two ways. Correcting one updates that person everywhere in the file,
+not just where you happened to be looking. Priority and complexity share their
 values (High, Medium, Low), so each carries an icon — a flag for priority,
 layers for complexity — to tell them apart without reading.
 

@@ -1,6 +1,13 @@
 'use client'
 
-import { ChevronRight, Flag, Layers } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  ChevronsLeftRight,
+  ChevronsUp,
+  Layers,
+} from 'lucide-react'
 import { Fragment, useState } from 'react'
 
 import type { PersonFilter } from '@/lib/filter.ts'
@@ -10,22 +17,30 @@ import {
   COMPLEXITIES,
   type KeyResult,
   PRIORITIES,
+  type Person,
   RACI_ROLES,
   STATUSES,
-  keyResultProgress,
+  canonical,
 } from '@/lib/okr.ts'
 
 import type { Editor } from './editor.ts'
-import { AddButton, EnumSelect, ProgressBar, Reference, TextField } from './fields.tsx'
-import { LabelPicker } from './label-picker.tsx'
+import {
+  AddButton,
+  EnumSelect,
+  Reference,
+  StatusBar,
+  TextField,
+  textToneFor,
+} from './fields.tsx'
+import { PersonPicker } from './person-picker.tsx'
 import { ReviewBadge } from './review-badge.tsx'
 import { TargetDate } from './target-date.tsx'
 
 const ROLE_HINTS: Record<string, string> = {
   accountable: 'Owns the outcome — one person',
   responsible: 'Does the work',
-  consulted: 'Asked before decisions',
-  informed: 'Told after decisions',
+  consult: 'Asked before decisions',
+  inform: 'Told after decisions',
 }
 
 /** RACI wants exactly one accountable; the other three are lists. */
@@ -46,7 +61,7 @@ export function KeyResultRow({
   path: Path
   timeframe: string | undefined
   cadence: string | undefined
-  people: string[]
+  people: Person[]
   person: PersonFilter
   editor: Editor
 }) {
@@ -59,65 +74,35 @@ export function KeyResultRow({
 
   return (
     <div className="border-t border-line/60">
-      <div className="flex items-start gap-3 px-4 py-2.5">
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          aria-expanded={open}
-          className="flex min-w-0 flex-1 items-start gap-2 text-left"
-        >
-          <ChevronRight
-            size={14}
-            className={`mt-0.5 shrink-0 text-ink-faint transition-transform
-              ${open ? 'rotate-90' : ''}`}
-          />
-          {!open && (
-            <>
-              <span className="min-w-0 flex-1 truncate text-sm text-ink-muted">
-                {measure.replace(/\s+/g, ' ').trim() || (
-                  <em className="text-ink-faint">Nothing measured yet</em>
-                )}
-              </span>
-              <span className="shrink-0 text-xs text-ink-faint">
-                {due || <span className="italic">(not set)</span>}
-              </span>
-              <span>
-                <ReviewBadge
-                  keyResult={keyResult}
-                  cadence={cadence}
-                  today={today()}
-                />
-              </span>
-            </>
-          )}
-        </button>
-
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <div className="flex items-center gap-1.5">
-            <EnumSelect
-              label={`${reference} status`}
-              value={status}
-              options={STATUSES}
-              onChange={(value) => editor.setKeyResult(path, 'status', value)}
-            />
-            <EnumSelect
-              label={`${reference} priority`}
-              value={keyResult.priority ?? ''}
-              options={PRIORITIES}
-              icon={<Flag size={10} />}
-              onChange={(value) => editor.setKeyResult(path, 'priority', value)}
-            />
-            <EnumSelect
-              label={`${reference} complexity`}
-              value={keyResult.complexity ?? ''}
-              options={COMPLEXITIES}
-              icon={<Layers size={10} />}
-              onChange={(value) => editor.setKeyResult(path, 'complexity', value)}
-            />
-          </div>
-          <ProgressBar progress={keyResultProgress(keyResult)} width="w-20" />
-        </div>
-      </div>
+      {/* One button, since nothing on the row is editable any more: the
+          controls live in the card, so clicking anywhere here just opens it. */}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left"
+      >
+        <ChevronRight
+          size={14}
+          className={`shrink-0 text-ink-faint transition-transform
+            ${open ? 'rotate-90' : ''}`}
+        />
+        {!open && (
+          <>
+            <span className="min-w-0 flex-1 truncate text-sm text-ink-muted">
+              {measure.replace(/\s+/g, ' ').trim() || (
+                <em className="text-ink-faint">Nothing measured yet</em>
+              )}
+            </span>
+            <span className="shrink-0 text-xs text-ink-faint">
+              {due || <span className="italic">(not set)</span>}
+            </span>
+            <ReviewBadge keyResult={keyResult} cadence={cadence} today={today()} />
+            <StatusBar status={status} />
+            <PriorityMark priority={keyResult.priority} />
+          </>
+        )}
+      </button>
 
       {open && (
         <div className="space-y-3 px-4 pb-4 pl-[2.25rem]">
@@ -135,17 +120,48 @@ export function KeyResultRow({
             className="text-sm leading-relaxed"
           />
 
-          <label className="flex items-center gap-1.5 text-xs text-ink-faint">
-            target date
-            <TargetDate
-              label={`${reference} target date`}
-              value={due}
-              timeframe={timeframe}
-              onCommit={(value) => editor.setKeyResult(path, 'target_date', value)}
-            />
-          </label>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-ink-faint">
+            <label className="flex items-center gap-1.5">
+              status
+              <EnumSelect
+                label={`${reference} status`}
+                value={status}
+                options={STATUSES}
+                onChange={(value) => editor.setKeyResult(path, 'status', value)}
+              />
+            </label>
+            <label className="flex items-center gap-1.5">
+              priority
+              <EnumSelect
+                label={`${reference} priority`}
+                value={keyResult.priority ?? ''}
+                options={PRIORITIES}
+                icon={priorityIcon(keyResult.priority, 11)}
+                onChange={(value) => editor.setKeyResult(path, 'priority', value)}
+              />
+            </label>
+            <label className="flex items-center gap-1.5">
+              complexity
+              <EnumSelect
+                label={`${reference} complexity`}
+                value={keyResult.complexity ?? ''}
+                options={COMPLEXITIES}
+                icon={<Layers size={10} />}
+                onChange={(value) => editor.setKeyResult(path, 'complexity', value)}
+              />
+            </label>
+            <label className="flex items-center gap-1.5">
+              target date
+              <TargetDate
+                label={`${reference} target date`}
+                value={due}
+                timeframe={timeframe}
+                onCommit={(value) => editor.setKeyResult(path, 'target_date', value)}
+              />
+            </label>
+          </div>
 
-          <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+          <div className="space-y-1">
             {RACI_ROLES.map((role) => (
               <div key={role} className="flex items-start gap-2 text-xs">
                 <span
@@ -154,13 +170,14 @@ export function KeyResultRow({
                 >
                   {role}
                 </span>
-                <LabelPicker
-                  values={keyResult.owners?.[role] ?? []}
+                <PersonPicker
+                  people={keyResult.owners?.[role] ?? []}
                   known={people}
                   multiple={!SINGLE_ROLES.has(role)}
                   label={`${reference} ${role}`}
                   highlight={person}
-                  onChange={(names) => editor.setOwners(path, role, names)}
+                  onChange={(chosen) => editor.setOwners(path, role, chosen)}
+                  onEditPerson={editor.editPerson}
                 />
               </div>
             ))}
@@ -170,6 +187,37 @@ export function KeyResultRow({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Priority as a glyph: the arrow points the way the urgency does, and the
+ * colour repeats it. On a row there is no space for a word.
+ */
+const PRIORITY_ICONS: Record<string, typeof ChevronUp> = {
+  Blocker: ChevronsUp,
+  High: ChevronUp,
+  Medium: ChevronsLeftRight,
+  Low: ChevronDown,
+}
+
+function priorityIcon(priority: string | undefined, size: number) {
+  const value = canonical(priority, PRIORITIES)
+  const Icon = value === null ? null : PRIORITY_ICONS[value]
+  return Icon ? <Icon size={size} /> : null
+}
+
+function PriorityMark({ priority }: { priority: string | undefined }) {
+  const value = canonical(priority, PRIORITIES)
+  if (value === null) return null
+  return (
+    <span
+      title={`Priority: ${value}`}
+      aria-label={`Priority ${value}`}
+      className={`shrink-0 ${textToneFor(value)}`}
+    >
+      {priorityIcon(value, 13)}
+    </span>
   )
 }
 

@@ -20,7 +20,7 @@ import {
   TextField,
   TimeframeSelect,
 } from './fields.tsx'
-import { LabelPicker } from './label-picker.tsx'
+import { PersonPicker } from './person-picker.tsx'
 import { ObjectiveTabs } from './tabs.tsx'
 import { ObjectiveCard } from './objective.tsx'
 
@@ -89,15 +89,14 @@ export function InitiativeCard({
           <Detail label="owner">
             {/* One name, held as a plain string in the file rather than a list,
                 but picked from the same pool as every other owner field. */}
-            <LabelPicker
-              values={initiative.owner ? [initiative.owner] : []}
+            <PersonPicker
+              people={initiative.owner ? [initiative.owner] : []}
               known={pools.people}
               multiple={false}
               label={`${id} owner`}
               highlight={person}
-              onChange={(names) =>
-                editor.setInitiative(path, 'owner', names[0] ?? '')
-              }
+              onChange={(chosen) => editor.setInitiativeOwner(path, chosen[0] ?? null)}
+              onEditPerson={editor.editPerson}
             />
           </Detail>
           <Detail label="timeframe">

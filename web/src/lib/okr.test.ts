@@ -28,7 +28,7 @@ const BASE = `version: 1
 strategic_initiatives:
   - id: TEK
     title: Technology
-    owner: roberto
+    owner: {name: roberto}
     timeframe: "2026"
     status: In Progress
     objectives:
@@ -40,7 +40,8 @@ strategic_initiatives:
             target_measure: A measurable thing reaches 100%.
             target_date: Q3
             owners:
-              accountable: [roberto]
+              accountable:
+                - {name: roberto}
             status: In Progress
             priority: High
             complexity: Medium
@@ -160,13 +161,35 @@ describe('autocorrect', () => {
     expect(doc.getIn(path.keyResult('id'))).toBe('KR1')
   })
 
-  test('wraps a single owner written as text in a list', () => {
-    const doc = base('accountable: [roberto]', 'accountable: roberto')
+  /**
+   * People used to be plain names. A file still written that way opens and
+   * upgrades itself, so nobody has to migrate by hand.
+   */
+  test('upgrades a bare name into the name/email shape', () => {
+    const doc = base('              accountable:\n                - {name: roberto}', '              accountable: [roberto]')
     const report = validate(doc)
 
     expect(report.ok).toBe(true)
-    expect(report.fixes.join()).toContain("wrapped 'roberto' in a list")
-    expect(stringify(doc)).toContain('accountable: [roberto]')
+    expect(report.fixes.join('\n')).toContain('given the name/email shape')
+    const keyResult =
+      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results?.[0]
+    expect(keyResult?.owners).toEqual({ accountable: [{ name: 'roberto' }] })
+  })
+
+  test('upgrades a bare name in a single-person field', () => {
+    const doc = base('    owner: {name: roberto}', '    owner: roberto')
+    const report = validate(doc)
+
+    expect(report.ok).toBe(true)
+    expect(toData(doc).strategic_initiatives?.[0]?.owner).toEqual({ name: 'roberto' })
+  })
+
+  test('rejects an address that is not one', () => {
+    const doc = base(
+      '                - {name: roberto}',
+      '                - {name: roberto, email: not-an-address}',
+    )
+    expect(validate(doc).errors.join('\n')).toContain("'not-an-address' is not an email")
   })
 
   test('leaves the document alone when there is nothing to repair', () => {
@@ -201,6 +224,41 @@ describe('a legacy progress field', () => {
     const keyResult =
       toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results?.[0]
     expect(keyResultProgress(keyResult ?? {})).toBe(50)
+  })
+})
+
+/**
+ * The two roles were once named after the RACI textbook. A file written under
+ * the old names opens and renames itself.
+ */
+describe('the old role names', () => {
+  test('are renamed as a repair, not rejected', () => {
+    const doc = base(
+      '              accountable:',
+      '              consulted:\n                - {name: maria}\n              accountable:',
+    )
+    const report = validate(doc)
+
+    expect(report.errors).toEqual([])
+    expect(report.fixes.join('\n')).toContain("'consulted' renamed to 'consult'")
+
+    const keyResult =
+      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results?.[0]
+    expect(keyResult?.owners?.consult).toEqual([{ name: 'maria' }])
+  })
+
+  test('keep the people under them and the position of the field', () => {
+    const doc = base(
+      '              accountable:',
+      '              informed:\n                - {name: cto}\n              accountable:',
+    )
+    validate(doc)
+
+    const text = stringify(doc)
+    expect(text).toContain('inform:')
+    expect(text).toContain('{name: cto}')
+    // Renamed in place: still the first role listed.
+    expect(text.indexOf('inform:')).toBeLessThan(text.indexOf('accountable:'))
   })
 })
 

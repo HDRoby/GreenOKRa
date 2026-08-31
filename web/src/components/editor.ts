@@ -1,4 +1,5 @@
 import type { Path } from '@/lib/edit.ts'
+import type { Person } from '@/lib/okr.ts'
 
 /**
  * The operations the UI can perform on the document.
@@ -14,8 +15,11 @@ export interface Editor {
   setObjective(path: Path, key: string, value: string, required?: boolean): void
   setKeyResult(path: Path, key: string, value: string, required?: boolean): void
 
-  setOwners(keyResult: Path, role: string, names: string[]): void
-  setObjectiveOwners(objective: Path, names: string[]): void
+  setOwners(keyResult: Path, role: string, people: Person[]): void
+  setObjectiveOwners(objective: Path, people: Person[]): void
+  setInitiativeOwner(initiative: Path, person: Person | null): void
+  /** Correct one person wherever they appear; their address is their identity. */
+  editPerson(identity: string, person: Person): void
 
   addNote(keyResult: Path, date: string, note: string): void
   setNote(keyResult: Path, index: number, key: 'date' | 'note', value: string): void

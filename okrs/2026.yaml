@@ -4,7 +4,7 @@ strategic_initiatives:
   # ---------------------------------------------------------------------------
   - id: PEP
     title: People
-    owner: roberto.basile
+    owner: {name: roberto.basile, email: roberto.basile@example.com}
     timeframe: "2026"
     review_cadence: Weekly
     status: In Progress
@@ -19,7 +19,9 @@ strategic_initiatives:
           where the real gaps are. One model, used by everyone, makes staffing
           and training decisions arguable with evidence.
         theme: Shared capability model
-        owners: [roberto.basile, elena.conti]
+        owners:
+          - {name: roberto.basile, email: roberto.basile@example.com}
+          - {name: elena.conti, email: elena.conti@example.com}
         status: In Progress
         links:
           - title: Capability model working draft
@@ -31,10 +33,14 @@ strategic_initiatives:
               by the leadership team and published.
             target_date: Q2
             owners:
-              accountable: [roberto.basile]
-              responsible: [elena.conti]
-              consulted: [hr-business-partners]
-              informed: [delivery-leads]
+              accountable:
+                - {name: roberto.basile, email: roberto.basile@example.com}
+              responsible:
+                - {name: elena.conti, email: elena.conti@example.com}
+              consult:
+                - {name: hr-business-partners}
+              inform:
+                - {name: delivery-leads}
             status: In Progress
             priority: Blocker
             complexity: Medium
@@ -52,9 +58,12 @@ strategic_initiatives:
               against the capability model.
             target_date: Q3
             owners:
-              accountable: [elena.conti]
-              responsible: [hr-business-partners]
-              informed: [delivery-leads]
+              accountable:
+                - {name: elena.conti, email: elena.conti@example.com}
+              responsible:
+                - {name: hr-business-partners}
+              inform:
+                - {name: delivery-leads}
             status: In Completion
             priority: High
             complexity: Low
@@ -68,8 +77,10 @@ strategic_initiatives:
               training path.
             target_date: Q4
             owners:
-              accountable: [roberto.basile]
-              consulted: [hr-business-partners]
+              accountable:
+                - {name: roberto.basile, email: roberto.basile@example.com}
+              consult:
+                - {name: hr-business-partners}
             status: Not Started
             priority: Medium
             complexity: Medium
@@ -77,9 +88,9 @@ strategic_initiatives:
   # ---------------------------------------------------------------------------
   - id: PRO
     title: Process
-    owner: marco.ferrari
+    owner: {name: marco.ferrari, email: marco.ferrari@example.com}
     timeframe: "2026"
-    review_cadence: Quarterly
+    review_cadence: Monthly
     status: In Progress
     description: >
       Make the way we govern and deliver work predictable enough that teams stop
@@ -91,7 +102,8 @@ strategic_initiatives:
           Design decisions are taken in meetings and lost. Teams re-litigate
           settled questions. Capture decisions where the work happens.
         theme: Architecture governance
-        owners: [marco.ferrari]
+        owners:
+          - {name: marco.ferrari, email: marco.ferrari@example.com}
         status: In Progress
         links:
           - title: Decision record template
@@ -105,9 +117,12 @@ strategic_initiatives:
               in all delivery repositories.
             target_date: "2026-04-30"
             owners:
-              accountable: [marco.ferrari]
-              responsible: [architecture-board]
-              informed: [delivery-leads]
+              accountable:
+                - {name: marco.ferrari, email: marco.ferrari@example.com}
+              responsible:
+                - {name: architecture-board}
+              inform:
+                - {name: delivery-leads}
             status: Completed
             priority: High
             complexity: Low
@@ -121,9 +136,12 @@ strategic_initiatives:
               drops below 5 working days.
             target_date: H2
             owners:
-              accountable: [marco.ferrari]
-              responsible: [architecture-board]
-              consulted: [delivery-leads]
+              accountable:
+                - {name: marco.ferrari, email: marco.ferrari@example.com}
+              responsible:
+                - {name: architecture-board}
+              consult:
+                - {name: delivery-leads}
             status: Started
             priority: High
             complexity: High
@@ -147,7 +165,8 @@ strategic_initiatives:
               monthly sponsor review.
             target_date: Q4
             owners:
-              accountable: [marco.ferrari]
+              accountable:
+                - {name: marco.ferrari, email: marco.ferrari@example.com}
             status: Not Started
             priority: Medium
             complexity: Medium
@@ -155,7 +174,7 @@ strategic_initiatives:
   # ---------------------------------------------------------------------------
   - id: TEK
     title: Technology
-    owner: roberto.basile
+    owner: {name: roberto.basile, email: roberto.basile@example.com}
     timeframe: "2026"
     review_cadence: Weekly
     status: In Progress
@@ -169,7 +188,9 @@ strategic_initiatives:
           Delivery teams still hand-write scaffolding, tests and boilerplate.
           Close the gap between an approved design and running code.
         theme: AI-assisted SDLC
-        owners: [roberto.basile, luca.bianchi]
+        owners:
+          - {name: roberto.basile, email: roberto.basile@example.com}
+          - {name: luca.bianchi, email: luca.bianchi@example.com}
         status: In Progress
         links:
           - title: AI-assisted SDLC charter
@@ -181,10 +202,14 @@ strategic_initiatives:
               least 60%.
             target_date: Q3
             owners:
-              accountable: [roberto.basile]
-              responsible: [luca.bianchi]
-              consulted: [architecture-board]
-              informed: [cto]
+              accountable:
+                - {name: roberto.basile, email: roberto.basile@example.com}
+              responsible:
+                - {name: luca.bianchi, email: luca.bianchi@example.com}
+              consult:
+                - {name: architecture-board}
+              inform:
+                - {name: cto}
             status: In Progress
             priority: High
             complexity: High
@@ -202,9 +227,12 @@ strategic_initiatives:
               developer image.
             target_date: "2026-05-31"
             owners:
-              accountable: [luca.bianchi]
-              responsible: [platform-team]
-              informed: [delivery-leads]
+              accountable:
+                - {name: luca.bianchi, email: luca.bianchi@example.com}
+              responsible:
+                - {name: platform-team}
+              inform:
+                - {name: delivery-leads}
             status: Completed
             priority: Blocker
             complexity: High
@@ -218,8 +246,10 @@ strategic_initiatives:
               hand-written code.
             target_date: Q4
             owners:
-              accountable: [luca.bianchi]
-              consulted: [architecture-board]
+              accountable:
+                - {name: luca.bianchi, email: luca.bianchi@example.com}
+              consult:
+                - {name: architecture-board}
             status: Not Started
             priority: High
             complexity: Very High
@@ -230,7 +260,8 @@ strategic_initiatives:
           A handful of legacy build systems cannot be driven by the orchestrator
           and force manual work on every release.
         theme: Architecture governance
-        owners: [luca.bianchi]
+        owners:
+          - {name: luca.bianchi, email: luca.bianchi@example.com}
         status: In Progress
         key_results:
           - id: KR1
@@ -239,8 +270,10 @@ strategic_initiatives:
               supported set.
             target_date: Q4
             owners:
-              accountable: [luca.bianchi]
-              responsible: [platform-team]
+              accountable:
+                - {name: luca.bianchi, email: luca.bianchi@example.com}
+              responsible:
+                - {name: platform-team}
             status: In Progress
             priority: Medium
             complexity: Very High
@@ -254,7 +287,8 @@ strategic_initiatives:
               A self-hosted artifact mirror serves all builds.
             target_date: Q3
             owners:
-              accountable: [luca.bianchi]
+              accountable:
+                - {name: luca.bianchi, email: luca.bianchi@example.com}
             status: Aborted
             priority: Low
             complexity: High
