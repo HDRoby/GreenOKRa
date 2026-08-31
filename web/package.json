@@ -1,0 +1,28 @@
+{
+  "name": "greenokra",
+  "version": "0.1.0",
+  "description": "Validator and editor for GreenOKRa OKR files",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "check": "node src/bin.ts check",
+    "show": "node src/bin.ts show"
+  },
+  "license": "Apache-2.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  },
+  "bin": {
+    "greenokra": "./src/bin.ts"
+  },
+  "engines": {
+    "node": ">=23.6"
+  }
+}

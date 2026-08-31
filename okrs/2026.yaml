@@ -1,0 +1,269 @@
+version: 1
+
+strategic_initiatives:
+  # ---------------------------------------------------------------------------
+  - id: PEP
+    title: People
+    owner: roberto.basile
+    timeframe: "2026"
+    review_cadence: Weekly check-in, quarterly sponsor review
+    status: In Progress
+    description: >
+      Build the skills and the shared language the organisation needs before any
+      tooling investment can pay off.
+    objectives:
+      - id: O1
+        title: Establish a shared capability model across delivery teams
+        description: >
+          Teams describe the same skill with different words, so we cannot see
+          where the real gaps are. One model, used by everyone, makes staffing
+          and training decisions arguable with evidence.
+        theme: Shared capability model
+        owners: [roberto.basile, elena.conti]
+        status: In Progress
+        links:
+          - title: Capability model working draft
+            url: https://confluence.example.com/x/CAP-MODEL
+        key_results:
+          - id: KR1
+            target_measure: >
+              A single capability model covering all delivery roles is approved
+              by the leadership team and published.
+            target_date: Q2
+            owners:
+              accountable: [roberto.basile]
+              responsible: [elena.conti]
+              consulted: [hr-business-partners]
+              informed: [delivery-leads]
+            status: In Progress
+            priority: Blocker
+            complexity: Medium
+            progress_notes:
+              - date: 2026-08-12
+                note: >
+                  Draft covers 14 of 17 roles. Data and platform roles still
+                  contested; workshop booked for early September.
+              - date: 2026-06-30
+                note: First draft circulated to delivery leads for comment.
+
+          - id: KR2
+            target_measure: >
+              At least 90% of delivery staff have a completed self-assessment
+              against the capability model.
+            target_date: Q3
+            owners:
+              accountable: [elena.conti]
+              responsible: [hr-business-partners]
+              informed: [delivery-leads]
+            status: In Progress
+            priority: High
+            complexity: Low
+            # Ahead of what "In Progress" alone would imply, so state it.
+            progress: 70
+            progress_notes:
+              - date: 2026-08-25
+                note: 71% submitted. Two practices lagging, chased directly.
+
+          - id: KR3
+            target_measure: >
+              Every identified critical skill gap has a named owner and a funded
+              training path.
+            target_date: Q4
+            owners:
+              accountable: [roberto.basile]
+              consulted: [hr-business-partners]
+            status: Not Started
+            priority: Medium
+            complexity: Medium
+
+  # ---------------------------------------------------------------------------
+  - id: PRO
+    title: Process
+    owner: marco.ferrari
+    timeframe: "2026"
+    review_cadence: Monthly review
+    status: In Progress
+    description: >
+      Make the way we govern and deliver work predictable enough that teams stop
+      inventing their own path through it.
+    objectives:
+      - id: O1
+        title: Make architecture decisions traceable and fast
+        description: >
+          Design decisions are taken in meetings and lost. Teams re-litigate
+          settled questions. Capture decisions where the work happens.
+        theme: Architecture governance
+        owners: [marco.ferrari]
+        status: In Progress
+        links:
+          - title: Decision record template
+            url: https://confluence.example.com/x/ADR-TEMPLATE
+          - title: Architecture board charter
+            url: https://confluence.example.com/x/ARCH-BOARD
+        key_results:
+          - id: KR1
+            target_measure: >
+              A lightweight decision record template is adopted as the default
+              in all delivery repositories.
+            target_date: "2026-04-30"
+            owners:
+              accountable: [marco.ferrari]
+              responsible: [architecture-board]
+              informed: [delivery-leads]
+            status: Completed
+            priority: High
+            complexity: Low
+            progress_notes:
+              - date: 2026-04-22
+                note: Template merged into the repo scaffolding. Closed.
+
+          - id: KR2
+            target_measure: >
+              Median time from design submission to architecture board decision
+              drops below 5 working days.
+            target_date: H2
+            owners:
+              accountable: [marco.ferrari]
+              responsible: [architecture-board]
+              consulted: [delivery-leads]
+            status: In Progress
+            priority: High
+            complexity: High
+            progress: 25
+            progress_notes:
+              - date: 2026-08-18
+                note: >
+                  Median down from 19 to 14 days. The queue, not the meeting, is
+                  the bottleneck — piloting async approval for low-risk changes.
+
+      - id: O2
+        title: Standardise how delivery risk is surfaced to sponsors
+        description: >
+          Sponsors learn about slippage too late to act on it. Every programme
+          reports differently, so nothing can be compared.
+        theme: Architecture governance
+        status: Not Started
+        key_results:
+          - id: KR1
+            target_measure: >
+              All programmes report risk against one agreed template in the
+              monthly sponsor review.
+            target_date: Q4
+            owners:
+              accountable: [marco.ferrari]
+            status: Not Started
+            priority: Medium
+            complexity: Medium
+
+  # ---------------------------------------------------------------------------
+  - id: TEK
+    title: Technology
+    owner: roberto.basile
+    timeframe: "2026"
+    review_cadence: Weekly check-in, monthly review, quarterly sponsor review
+    status: In Progress
+    description: >
+      Put AI into the delivery path itself rather than alongside it, and prove
+      the saving against a measured baseline.
+    objectives:
+      - id: O1
+        title: Make the SDLC AI-assisted end to end
+        description: >
+          Delivery teams still hand-write scaffolding, tests and boilerplate.
+          Close the gap between an approved design and running code.
+        theme: AI-assisted SDLC
+        owners: [roberto.basile, luca.bianchi]
+        status: In Progress
+        links:
+          - title: AI-assisted SDLC charter
+            url: https://confluence.example.com/x/AI-SDLC
+        key_results:
+          - id: KR1
+            target_measure: >
+              Coding time saved versus the pre-orchestrator baseline reaches at
+              least 60%.
+            target_date: Q3
+            owners:
+              accountable: [roberto.basile]
+              responsible: [luca.bianchi]
+              consulted: [architecture-board]
+              informed: [cto]
+            status: In Progress
+            priority: High
+            complexity: High
+            progress: 40
+            progress_notes:
+              - date: 2026-08-20
+                note: >
+                  Pilot teams at 31% saved against a 12 h/feature baseline. Two
+                  teams blocked on runner capacity.
+              - date: 2026-07-18
+                note: Baseline measured at 12 h/feature across four teams.
+
+          - id: KR2
+            target_measure: >
+              An orchestrator is available to all delivery teams on the standard
+              developer image.
+            target_date: "2026-05-31"
+            owners:
+              accountable: [luca.bianchi]
+              responsible: [platform-team]
+              informed: [delivery-leads]
+            status: Completed
+            priority: Blocker
+            complexity: High
+            progress_notes:
+              - date: 2026-05-28
+                note: Shipped in image 2026.05. Adoption tracked under KR1.
+
+          - id: KR3
+            target_measure: >
+              Automated test coverage on AI-generated code is no lower than on
+              hand-written code.
+            target_date: Q4
+            owners:
+              accountable: [luca.bianchi]
+              consulted: [architecture-board]
+            status: Not Started
+            priority: High
+            complexity: Very High
+
+      - id: O2
+        title: Retire the platform choices that block automation
+        description: >
+          A handful of legacy build systems cannot be driven by the orchestrator
+          and force manual work on every release.
+        theme: Architecture governance
+        owners: [luca.bianchi]
+        status: In Progress
+        key_results:
+          - id: KR1
+            target_measure: >
+              No delivery pipeline depends on a build system outside the
+              supported set.
+            target_date: Q4
+            owners:
+              accountable: [luca.bianchi]
+              responsible: [platform-team]
+            status: In Progress
+            priority: Medium
+            complexity: Very High
+            progress_notes:
+              - date: 2026-08-05
+                note: 3 of 11 pipelines migrated. Two owners not yet identified.
+
+          # Aborted work keeps its id forever: KR2 is never reused.
+          - id: KR2
+            target_measure: >
+              A self-hosted artifact mirror serves all builds.
+            target_date: Q3
+            owners:
+              accountable: [luca.bianchi]
+            status: Aborted
+            priority: Low
+            complexity: High
+            progress_notes:
+              - date: 2026-07-02
+                note: >
+                  Dropped. The managed mirror shipped by the vendor covers the
+                  requirement at lower cost. Excluded from progress.
