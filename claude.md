@@ -15,6 +15,7 @@ web/
   src/lib/dates.ts           timeframes and target dates
   src/lib/labels.ts          the people and themes a file reuses, and their colours
   src/lib/filter.ts          narrowing the view to one person
+  src/lib/review.ts          whether a key result is overdue a review
   src/lib/file-access.ts     opening and saving in the browser
   src/cli.ts, src/bin.ts     terminal front end (check / show)
   src/app/                   the Next.js page
@@ -30,11 +31,29 @@ component, not in a script, not in another language. If the editor needs a rule,
 export it from `okr.ts`. When the format changes, `SPEC.md` and `okr.ts` change
 in the same commit.
 
-**Derive, never store.** Progress percentages, the date a period resolves to, the
-list of people and themes a file uses, who the filter can offer — all computed
-from the document on every read. A value derived on demand cannot drift out of
-sync, and cannot need cleaning up when its last use disappears. Resist the urge
-to cache any of it in state.
+**Derive, never store — except people.** Progress percentages, the date a period
+resolves to, the themes in use, who the filter can offer, whether a review is
+overdue: all computed from the document on every read. A value derived on demand
+cannot drift out of sync. Resist the urge to cache any of it in state.
+
+The exception is deliberate. **People are defined once in a `people` roster and
+referenced by identity** — their address, or their name where they have no
+address. That is storage, and it buys something derivation cannot: one place to
+correct a name or an address, rather than the same person written out eight
+times. Consequences to keep in mind:
+
+- Owner fields hold reference strings, not people. Resolve with `findPerson`.
+- Nobody is pruned. Removing somebody's last mention leaves them defined, so
+  they can be reassigned without being retyped.
+- Changing an address changes an identity, so `updatePerson` rewrites every
+  reference. Changing only a name does not, unless they have no address.
+
+**Every format change migrates itself on read.** Five have landed so far — the
+progress field retired, cadence made an enum, people given addresses, two RACI
+roles renamed, people factored into a roster — and each one repairs an older
+file rather than rejecting it, reporting what it did. A file written against any
+earlier version still opens. Keep it that way: reach for a repair before an
+error, and only error where no repair could be correct.
 
 **Filtered lists must carry their original indices.** Editing addresses YAML
 nodes by position — `strategic_initiatives[2].objectives[0]` — so filtering an
@@ -43,10 +62,16 @@ wrong record. Use `withIndices` from `filter.ts`, which pairs each item with its
 true position *before* filtering. This is silent data corruption if you get it
 wrong; there are tests pinning it.
 
-**Editor conveniences are not format rules.** The status auto-advance lives in
-`edit.ts`, not in `validate()`, and `SPEC.md` says plainly that a file where the
-levels disagree is still valid. Anything the editor does for the user's
+**Editor conveniences are not format rules.** The status auto-advance and the
+review-overdue clock live outside `validate()`, and `SPEC.md` says plainly that
+a file they disagree with is still valid. Anything done for the user's
 convenience belongs on that side of the line.
+
+**Fixtures and examples are canonical.** Every test fixture and the YAML example
+in `SPEC.md` parse with no errors and no repairs. They are the first thing
+anybody reads, so they should show the shape the writer actually produces. After
+a format change, re-canonicalise them by running them through
+`parse → validate → stringify` rather than hand-editing.
 
 ## Package management
 
@@ -120,11 +145,33 @@ saving an unchanged file byte-identical.
 - Mutate scalar values in place (`node.value = x`) rather than replacing nodes,
   which drops attached comments. Block scalars (`>`) and quoted scalars are
   `str` subclasses — rewriting them destroys their formatting
-- Numbers need a number node. Writing the string `'40'` emits `progress: "40"`,
-  which reads back as text and breaks the rollup
+- Numbers need a number node. Writing the string `'40'` emits `"40"`, which
+  reads back as text — this cost a rollup once, before the progress field was
+  retired
 - Values inserted with `doc.setIn(...)` arrive as plain JS, not YAML nodes;
   `validate()` materialises them, so validate after editing
 - New fields go in at their documented position via `setField`, not appended
+- People are written as a one-line flow mapping inside a block list. A flow
+  list line-wraps once it grows, which breaks byte-stability and reads badly
+
+## The format, in brief
+
+Read `SPEC.md` for the whole of it. The parts most easily got wrong:
+
+- **Status is a ladder that carries the percentage** — `Not Started` 0,
+  `Started` 25, `In Progress` 50, `In Completion` 75, `Completed` 100. There is
+  no separate progress field. `Aborted` is not a rung: it is excluded from
+  rollups rather than scored zero, and reports no percentage of its own at any
+  level
+- **Percentages display to the nearest 5%**, and 0% and 100% are reserved for
+  actually-none and actually-all
+- **RACI is `accountable`, `responsible`, `consult`, `inform`** — the last two
+  are not the textbook's `consulted` and `informed`
+- **`review_cadence` is an enum** — Weekly, Bi-Weekly, Monthly, Quarterly,
+  6 Months, Yearly — because the editor measures the newest progress note
+  against it
+- **Ids are permanent.** Dropped work becomes `Aborted` and keeps its id;
+  numbering never reissues one
 
 ## Web UI
 
@@ -149,8 +196,17 @@ Conventions worth keeping:
 - **Text fields commit on blur**, not per keystroke, because validation
   normalises values and normalising mid-word fights the person typing. Selects
   commit immediately
-- **One component per affordance.** `AddButton` and `LabelPicker` exist so four
-  add buttons and five owner fields cannot drift apart again
+- **One component per affordance.** `AddButton`, `LabelPicker`, `PersonPicker`
+  and `Dropdown` exist so the same control cannot drift apart in four places
+- **Colours live in one map.** `TONES` in `fields.tsx` holds each value's pill,
+  text and bar spellings in a single entry, because Tailwind only sees literal
+  class names — `text-${colour}` never reaches the stylesheet, so composing one
+  from the other is not an option
+- **Colour is spent where it means something.** Statuses are a hue ramp because
+  the order is the meaning; people are neutral, because a hue hashed from a name
+  teaches the reader nothing. The accent marks the person being filtered on
+- **Initiatives are tabs, objectives and key results are lists.** Tabs suit a
+  handful; a strip that scrolls sideways hides most of what it holds
 - **Never call a browser-only function during render.** `canSaveInPlace()`
   answers differently on the server and in the browser, which breaks hydration.
   Resolve it in an effect
@@ -163,7 +219,8 @@ Conventions worth keeping:
 ## Editing OKR files
 
 - Run `check` after editing anything in `okrs/`
-- Never hand-write a percentage — progress is always computed from status
+- Never hand-write a percentage — the status carries it
+- Never write a person inline; add them to `people` and refer to them
 - Never renumber or reuse an id. Dropped work gets `status: Aborted` and keeps
   its id forever, which is why the editor has no delete for initiatives,
   objectives or key results
