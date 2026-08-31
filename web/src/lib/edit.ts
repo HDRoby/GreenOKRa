@@ -222,7 +222,13 @@ export function addProgressNote(
 /** The fields of a progress note, in the order SPEC.md documents them. */
 const NOTE_KEYS = ['date', 'note'] as const
 
-/** Edit one field of an existing note. */
+/**
+ * Edit one field of an existing note.
+ *
+ * Clearing the note text removes the entry. A dated blank is not a review note,
+ * and keeping it would only raise a validation error whose fix is to delete the
+ * thing anyway — so emptying the field is how a note is deleted.
+ */
 export function setNoteField(
   doc: Document,
   keyResult: Path,
@@ -232,7 +238,27 @@ export function setNoteField(
 ): void {
   const notes = doc.getIn([...keyResult, 'progress_notes'], true)
   if (!isSeq(notes) || !isMap(notes.items[index])) return
+
+  if (key === 'note' && value.trim() === '') {
+    removeNote(doc, keyResult, index)
+    return
+  }
   setField(doc, [...keyResult, 'progress_notes', index], key, value, NOTE_KEYS)
+}
+
+/** Drop a note, and the whole key with it when that was the last one. */
+export function removeNote(doc: Document, keyResult: Path, index: number): void {
+  const notes = doc.getIn([...keyResult, 'progress_notes'], true)
+  if (!isSeq(notes)) return
+
+  notes.items.splice(index, 1)
+  if (notes.items.length > 0) return
+
+  // An empty list would be legal but pointless; the field is optional.
+  const map = doc.getIn(keyResult, true)
+  if (isMap(map)) {
+    map.items = map.items.filter((pair) => keyOf(pair) !== 'progress_notes')
+  }
 }
 
 /**

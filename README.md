@@ -131,7 +131,8 @@ its id. Numbering never reuses a retired id either: abort `KR2` and the next key
 result is `KR3`.
 
 Progress notes are ordinary editable fields. Re-dating one re-sorts the log, so
-it stays newest-first.
+it stays newest-first, and clearing a note's text deletes the entry — which is
+how a note written in error is removed.
 
 ### Saving in place
 

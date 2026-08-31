@@ -1,11 +1,13 @@
 'use client'
 
-import { ChevronDown, Users } from 'lucide-react'
+import { Users } from 'lucide-react'
 
 import { EVERYONE, type PersonFilter } from '@/lib/filter.ts'
 import { labelTint } from '@/lib/labels.ts'
 
-const ALL = 'All'
+import { Dropdown, type DropdownOption } from './dropdown.tsx'
+
+const ALL = 'Everyone'
 
 const WHAT_IT_DOES =
   'Show only the initiatives, objectives and key results this person owns, ' +
@@ -33,41 +35,32 @@ export function PersonFilterSelect({
   // the control never displays something that is not in its own list.
   const options = filtering && !people.includes(person) ? [person, ...people] : people
 
+  const peopleOptions: DropdownOption[] = [
+    { value: ALL, label: ALL },
+    ...options.map((name) => ({
+      value: name,
+      label: name,
+      // The same chip the person wears throughout the file.
+      chipClassName: 'inline-block rounded-full border px-2 py-0.5 text-xs',
+      chipStyle: labelTint(name),
+    })),
+  ]
+
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs text-ink-faint">
       <span>showing</span>
 
-      <div className="relative inline-flex">
-        <select
-          aria-label="Show only one person's work"
-          title={WHAT_IT_DOES}
-          value={person ?? ALL}
-          onChange={(event) =>
-            onChange(event.target.value === ALL ? EVERYONE : event.target.value)
-          }
-          style={filtering ? labelTint(person, true) : undefined}
-          className={`appearance-none cursor-pointer rounded-full border py-0.5 pr-6 pl-6
-            text-xs focus:outline-none focus:ring-1 focus:ring-accent-dim
-            ${filtering ? 'font-medium' : 'border-line bg-surface-raised text-ink-muted'}`}
-        >
-          <option value={ALL} className="bg-surface text-ink">
-            Everyone
-          </option>
-          {options.map((name) => (
-            <option key={name} value={name} className="bg-surface text-ink">
-              {name}
-            </option>
-          ))}
-        </select>
-        <Users
-          size={11}
-          className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 opacity-70"
-        />
-        <ChevronDown
-          size={12}
-          className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 opacity-60"
-        />
-      </div>
+      <Dropdown
+        value={person ?? ALL}
+        options={peopleOptions}
+        onChange={(next) => onChange(next === ALL ? EVERYONE : next)}
+        label={WHAT_IT_DOES}
+        icon={<Users size={11} className="shrink-0 opacity-70" />}
+        triggerStyle={filtering ? labelTint(person, true) : undefined}
+        triggerClassName={`cursor-pointer rounded-full border py-0.5 pr-1.5 pl-2 text-xs
+          focus:outline-none focus:ring-1 focus:ring-accent-dim
+          ${filtering ? 'font-medium' : 'border-line bg-surface-raised text-ink-muted'}`}
+      />
 
       <span>
         {filtering

@@ -9,6 +9,7 @@ import {
   keyResultPath,
   objectivePath,
   removeLink,
+  removeNote,
   setField,
   setNoteField,
   setNumberField,
@@ -259,6 +260,58 @@ describe('progress notes', () => {
     sortNotes(doc, keyResult)
     expect(dates()).toEqual(['2026-06-01', '2026-05-01'])
     expect(validate(doc).warnings).toEqual([])
+  })
+
+  test('emptying a note removes it', () => {
+    const doc = parse(BASE)
+    addProgressNote(doc, keyResult, '2026-06-01', 'June.')
+    addProgressNote(doc, keyResult, '2026-08-01', 'August.')
+
+    setNoteField(doc, keyResult, 0, 'note', '   ')
+
+    const notes =
+      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results?.[0]
+        ?.progress_notes
+    expect(notes?.map((note) => note.note)).toEqual(['June.'])
+    expect(validate(doc).errors).toEqual([])
+  })
+
+  test('emptying the last note removes the whole field', () => {
+    const doc = parse(BASE)
+    addProgressNote(doc, keyResult, '2026-08-01', 'The only note.')
+
+    setNoteField(doc, keyResult, 0, 'note', '')
+
+    // An empty list would be legal but pointless, and the field is optional.
+    expect(stringify(doc)).not.toContain('progress_notes')
+    expectStillSound(doc)
+  })
+
+  test('removeNote leaves the other entries in order', () => {
+    const doc = parse(BASE)
+    addProgressNote(doc, keyResult, '2026-06-01', 'June.')
+    addProgressNote(doc, keyResult, '2026-07-01', 'July.')
+    addProgressNote(doc, keyResult, '2026-08-01', 'August.')
+
+    removeNote(doc, keyResult, 1) // July, the middle one
+
+    const notes =
+      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results?.[0]
+        ?.progress_notes
+    expect(notes?.map((note) => note.note)).toEqual(['August.', 'June.'])
+    expectStillSound(doc)
+  })
+
+  test('clearing the date is left as a validation error, not a deletion', () => {
+    const doc = parse(BASE)
+    addProgressNote(doc, keyResult, '2026-08-01', 'Still worth keeping.')
+
+    setNoteField(doc, keyResult, 0, 'date', '')
+
+    // The note still says something, so it is incomplete rather than unwanted.
+    expect(validate(doc).errors.join('\n')).toContain(
+      "progress_notes[0].date: '' is not a YYYY-MM-DD date",
+    )
   })
 
   test('editing a note leaves the rest of the document alone', () => {

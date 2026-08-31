@@ -5,6 +5,8 @@ import { useState } from 'react'
 
 import { labelTint } from '@/lib/labels.ts'
 
+import { Dropdown } from './dropdown.tsx'
+
 const NEW = ' new'
 
 /**
@@ -98,28 +100,25 @@ export function LabelPicker({
       )}
 
       {mode === 'pick' && (
-        <select
-          autoFocus
-          aria-label={`Choose ${label}`}
+        <Dropdown
+          defaultOpen
           value=""
-          onChange={(event) =>
-            event.target.value === NEW ? setMode('new') : commit(event.target.value)
-          }
-          onBlur={() => setMode('idle')}
-          onKeyDown={(event) => event.key === 'Escape' && setMode('idle')}
-          className="rounded-md border border-line bg-surface px-1.5 py-0.5 text-xs
-            focus:outline-none focus:ring-1 focus:ring-accent-dim"
-        >
-          <option value="" disabled>
-            Choose…
-          </option>
-          {available.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-          <option value={NEW}>New…</option>
-        </select>
+          options={[
+            ...available.map((name) => ({
+              value: name,
+              label: name,
+              chipClassName: 'inline-block rounded-full border px-2 py-0.5 text-xs',
+              chipStyle: labelTint(name),
+            })),
+            { value: NEW, label: 'New…' },
+          ]}
+          onChange={(chosen) => (chosen === NEW ? setMode('new') : commit(chosen))}
+          onClose={() => setMode((current) => (current === 'pick' ? 'idle' : current))}
+          label={`Choose ${label}`}
+          placeholder="Choose…"
+          triggerClassName="cursor-pointer rounded-md border border-line bg-surface px-1.5
+            py-0.5 text-xs text-ink-muted focus:outline-none focus:ring-1 focus:ring-accent-dim"
+        />
       )}
 
       {mode === 'new' && (

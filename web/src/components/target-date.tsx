@@ -1,9 +1,9 @@
 'use client'
 
-import { ChevronDown } from 'lucide-react'
-
 import { PERIODS, isDate, periodEndIso, periodOf, resolveDate } from '@/lib/dates.ts'
 import { today } from '@/lib/file-access.ts'
+
+import { Dropdown, type DropdownOption } from './dropdown.tsx'
 
 const EXACT = 'Date'
 
@@ -30,6 +30,13 @@ export function TargetDate({
   const selection = exact ? EXACT : (period ?? value)
   const resolved = resolveDate(value, timeframe)
 
+  const options: DropdownOption[] = [
+    // A label the list does not recognise — "September", say — stays usable.
+    ...(!exact && !period ? [{ value, label: value || '(not set)' }] : []),
+    ...PERIODS.map((option) => ({ value: option, label: option })),
+    { value: EXACT, label: 'Date…' },
+  ]
+
   const choose = (choice: string) => {
     if (choice === EXACT) {
       // Start from the day the current period implies, rather than from nothing.
@@ -41,30 +48,15 @@ export function TargetDate({
 
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className="relative inline-flex">
-        <select
-          aria-label={label}
-          value={selection}
-          onChange={(event) => choose(event.target.value)}
-          className="appearance-none cursor-pointer rounded-md border border-line
-            bg-surface-raised py-0.5 pr-5 pl-2 text-xs text-ink-muted
-            focus:outline-none focus:ring-1 focus:ring-accent-dim"
-        >
-          {!exact && !period && (
-            <option value={value}>{value || '(not set)'}</option>
-          )}
-          {PERIODS.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-          <option value={EXACT}>Date…</option>
-        </select>
-        <ChevronDown
-          size={11}
-          className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 opacity-60"
-        />
-      </span>
+      <Dropdown
+        value={selection}
+        options={options}
+        onChange={choose}
+        label={label}
+        triggerClassName="cursor-pointer rounded-md border border-line bg-surface-raised
+          py-0.5 pr-1.5 pl-2 text-xs text-ink-muted
+          focus:outline-none focus:ring-1 focus:ring-accent-dim"
+      />
 
       {exact ? (
         <input

@@ -1,10 +1,12 @@
 'use client'
 
-import { ChevronDown, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { timeframeGroups } from '@/lib/dates.ts'
 import { displayProgress, formatProgress } from '@/lib/okr.ts'
+
+import { Dropdown, type DropdownOption, toOptions } from './dropdown.tsx'
 
 /**
  * A field that reads as plain text until you touch it.
@@ -109,8 +111,15 @@ function toneFor(value: string): string {
   return TONES[value] ?? 'text-ink-muted border-line bg-surface-raised'
 }
 
+/** The pill an enum value becomes, used both closed and in the list. */
+const PILL = 'inline-block rounded-full border px-2 py-0.5 text-xs'
+
+function pillFor(value: string): string {
+  return `${PILL} ${toneFor(value)}`
+}
+
 /**
- * A small pill select. Native, so keyboard and touch behaviour come free.
+ * A small pill of a select.
  *
  * `icon` matters where two lists share their values — priority and complexity
  * both read High/Medium/Low, and a glyph tells them apart faster than reading
@@ -130,35 +139,36 @@ export function EnumSelect({
   icon?: React.ReactNode
 }) {
   const known = options.includes(value)
+  // A value the file holds but the list does not stays selectable, rather than
+  // the control displaying something absent from its own options.
+  const listed: DropdownOption[] = options.map((option) => ({
+    value: option,
+    label: option,
+    chipClassName: pillFor(option),
+  }))
+  if (!known) {
+    // A value the file holds but the list does not stays selectable, rather
+    // than the control displaying something absent from its own options.
+    listed.unshift({
+      value,
+      label: value || '(not set)',
+      chipClassName: pillFor(value),
+    })
+  }
+
   return (
-    <div className="relative inline-flex">
-      {icon && (
-        <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 opacity-70">
-          {icon}
-        </span>
-      )}
-      <select
-        aria-label={label}
-        title={label}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={`appearance-none cursor-pointer rounded-full border py-0.5 pr-6 text-xs
-          focus:outline-none focus:ring-1 focus:ring-accent-dim
-          ${icon ? 'pl-6' : 'pl-2.5'}
-          ${known ? toneFor(value) : 'text-dropped border-dropped bg-dropped/10'}`}
-      >
-        {!known && <option value={value}>{value || '(not set)'}</option>}
-        {options.map((option) => (
-          <option key={option} value={option} className="bg-surface text-ink">
-            {option}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        size={12}
-        className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 opacity-60"
-      />
-    </div>
+    <Dropdown
+      value={value}
+      options={listed}
+      onChange={onChange}
+      label={label}
+      icon={icon}
+      align="right"
+      triggerClassName={`cursor-pointer rounded-full border py-0.5 pr-1.5 text-xs
+        focus:outline-none focus:ring-1 focus:ring-accent-dim
+        ${icon ? 'pl-2' : 'pl-2.5'}
+        ${known ? toneFor(value) : 'border-dropped bg-dropped/10 text-dropped'}`}
+    />
   )
 }
 
@@ -180,31 +190,22 @@ export function PercentSelect({
   // A file may hold any whole number; keep it selectable rather than snapping
   // it to a tenth behind the user's back.
   const odd = typeof value === 'number' && !PERCENT_STEPS.includes(value)
+  const options: DropdownOption[] = [
+    { value: '', label: 'auto' },
+    ...(odd ? [{ value: String(value), label: `${value}%` }] : []),
+    ...PERCENT_STEPS.map((step) => ({ value: String(step), label: `${step}%` })),
+  ]
+
   return (
-    <div className="relative inline-flex">
-      <select
-        aria-label={label}
-        value={value ?? ''}
-        onChange={(event) =>
-          onChange(event.target.value === '' ? null : Number(event.target.value))
-        }
-        className="appearance-none cursor-pointer rounded-md border border-line bg-surface-raised
-          py-0.5 pr-5 pl-2 text-xs tabular-nums text-ink-muted
-          focus:outline-none focus:ring-1 focus:ring-accent-dim"
-      >
-        <option value="">auto</option>
-        {odd && <option value={value}>{value}%</option>}
-        {PERCENT_STEPS.map((step) => (
-          <option key={step} value={step}>
-            {step}%
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        size={11}
-        className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 opacity-60"
-      />
-    </div>
+    <Dropdown
+      value={value === null || value === undefined ? '' : String(value)}
+      options={options}
+      onChange={(next) => onChange(next === '' ? null : Number(next))}
+      label={label}
+      triggerClassName="cursor-pointer rounded-md border border-line bg-surface-raised
+        py-0.5 pr-1.5 pl-2 text-xs tabular-nums text-ink-muted
+        focus:outline-none focus:ring-1 focus:ring-accent-dim"
+    />
   )
 }
 
@@ -217,34 +218,28 @@ export function TimeframeSelect({
   onChange: (value: string) => void
 }) {
   const groups = timeframeGroups(new Date().getFullYear())
-  const known = groups.some((group) => group.values.includes(value))
+  const options: DropdownOption[] = groups.flatMap((group) =>
+    group.values.map((option) => ({
+      value: option,
+      label: option,
+      group: String(group.year),
+    })),
+  )
+  const known = options.some((option) => option.value === value)
+  if (!known) {
+    options.unshift({ value, label: value || '(not set)' })
+  }
 
   return (
-    <div className="relative inline-flex">
-      <select
-        aria-label="Timeframe"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="appearance-none cursor-pointer rounded-md border border-line bg-surface-raised
-          py-0.5 pr-5 pl-2 text-xs tabular-nums text-ink-muted
-          focus:outline-none focus:ring-1 focus:ring-accent-dim"
-      >
-        {!known && <option value={value}>{value || '(not set)'}</option>}
-        {groups.map((group) => (
-          <optgroup key={group.year} label={String(group.year)}>
-            {group.values.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
-      <ChevronDown
-        size={11}
-        className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 opacity-60"
-      />
-    </div>
+    <Dropdown
+      value={value}
+      options={options}
+      onChange={onChange}
+      label="Timeframe"
+      triggerClassName="cursor-pointer rounded-md border border-line bg-surface-raised
+        py-0.5 pr-1.5 pl-2 text-xs tabular-nums text-ink-muted
+        focus:outline-none focus:ring-1 focus:ring-accent-dim"
+    />
   )
 }
 
