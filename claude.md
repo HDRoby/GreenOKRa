@@ -221,17 +221,17 @@ Conventions worth keeping:
 - Run `check` after editing anything in `okrs/`
 - Never hand-write a percentage — the status carries it
 - Never write a person inline; add them to `people` and refer to them
-- Never renumber or reuse an id. Dropped work gets `status: Aborted` and keeps
-  its id forever, which is why the editor has no delete for initiatives,
-  objectives or key results
+- Never renumber an id. Records can be deleted, behind a confirmation, but
+  deleting **frees the id** for the next record to take — so prefer
+  `status: Aborted` for work that was real, which keeps the id spoken for
 - Progress notes are editable, and the log re-sorts newest-first when one is
   re-dated
 
-## A naming inconsistency
+## The name
 
-The UI says **GreenOKR**; the repository, the npm package and the docs say
-**GreenOKRa**. Unresolved on purpose — renaming the repo and the CLI binary has
-knock-on effects. Do not "fix" one side without being asked.
+**GreenOKRa** everywhere — the app, the repository, the npm package and the
+docs. The logo's wordmark reads "GreenOKR", since it is artwork rather than
+text; that is the one place the two differ.
 
 ## What NOT to do
 

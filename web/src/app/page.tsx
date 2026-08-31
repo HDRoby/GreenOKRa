@@ -1,13 +1,13 @@
 'use client'
 
-import { FileDown, FilePlus2, FolderOpen, Save } from 'lucide-react'
-import Image from 'next/image'
+import { FileDown, FilePlus2, FolderOpen, Save, Sprout } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Document } from 'yaml'
 
 import { InitiativeCard } from '@/components/initiative.tsx'
 import type { Editor } from '@/components/editor.ts'
 import { ReportPanel } from '@/components/report-panel.tsx'
+import { Wordmark } from '@/components/wordmark.tsx'
 import { PersonFilterSelect } from '@/components/person-filter.tsx'
 import { InitiativeTabs } from '@/components/tabs.tsx'
 import {
@@ -19,7 +19,10 @@ import {
   addProgressNote,
   addObjective,
   applyStatusRules,
+  removeInitiative,
+  removeKeyResult,
   removeLink,
+  removeObjective,
   setField,
   setNoteField,
   setInitiativeOwner,
@@ -57,6 +60,18 @@ import {
 } from '@/lib/okr.ts'
 
 const LINK_KEYS = ['title', 'url'] as const
+
+/**
+ * A file with nothing in it yet.
+ *
+ * The list is empty rather than seeded with a placeholder initiative: the
+ * format says a file needs at least one, so validation says so too, and the
+ * page offers the same "new initiative" form it always does. Inventing a
+ * TEK/O1/KR1 nobody asked for would only have to be edited away.
+ */
+const EMPTY_FILE = `version: 1
+strategic_initiatives: []
+`
 
 export default function Page() {
   const docRef = useRef<Document | null>(null)
@@ -157,8 +172,13 @@ export default function Page() {
       sortNotes: (path) => commit((doc) => sortNotes(doc, path)),
       addKeyResult: (path) => commit((doc) => addKeyResult(doc, path)),
       addObjective: (path) => commit((doc) => addObjective(doc, path)),
-      addInitiative: (id, title, timeframe) =>
-        commit((doc) => addInitiative(doc, id, title, timeframe)),
+      addInitiative: (draft) => commit((doc) => addInitiative(doc, draft)),
+
+      removeInitiative: (index) => commit((doc) => removeInitiative(doc, index)),
+      removeObjective: (path, index) =>
+        commit((doc) => removeObjective(doc, path, index)),
+      removeKeyResult: (path, index) =>
+        commit((doc) => removeKeyResult(doc, path, index)),
 
       addLink: (path) => commit((doc) => addLink(doc, path)),
       setLink: (path: Path, index, key, value) =>
@@ -180,6 +200,14 @@ export default function Page() {
     if (outcome.reason) setMessage(outcome.reason)
     fileInput.current?.click()
   }, [load])
+
+  const newFile = useCallback(() => {
+    // Starting over discards whatever is unsaved, so ask first.
+    if (dirty && !window.confirm('Start a new file? Unsaved changes will be lost.')) {
+      return
+    }
+    load({ name: 'okrs.yaml', text: EMPTY_FILE, handle: null })
+  }, [dirty, load])
 
   const loadExample = useCallback(async () => {
     const response = await fetch('./example.yaml')
@@ -247,6 +275,7 @@ export default function Page() {
           people={filterablePeople(data)}
           person={person}
           onPerson={setPerson}
+          onNew={newFile}
           onOpen={openFile}
           onSave={saveFile}
         />
@@ -271,7 +300,12 @@ export default function Page() {
       )}
 
       {!data ? (
-        <EmptyState onOpen={openFile} onExample={loadExample} canSave={canSave} />
+        <EmptyState
+          onNew={newFile}
+          onOpen={openFile}
+          onExample={loadExample}
+          canSave={canSave}
+        />
       ) : (
         <main>
           <InitiativeTabs
@@ -279,8 +313,10 @@ export default function Page() {
             active={active}
             person={person}
             onSelect={setTab}
-            onAdd={(id, title, timeframe) => {
-              editor.addInitiative(id, title, timeframe)
+            people={pools.people}
+            onAddPerson={editor.addPerson}
+            onAdd={(draft) => {
+              editor.addInitiative(draft)
               // A new initiative names nobody yet, so a filter would hide it.
               setPerson(EVERYONE)
               setTab(initiatives.length) // show what was just created
@@ -295,14 +331,12 @@ export default function Page() {
               person={person}
               editor={editor}
             />
-          ) : person !== EVERYONE ? (
-            <p className="mt-16 text-center text-sm text-ink-muted">
-              Nothing in this file involves {person}.
-            </p>
           ) : (
-            <p className="mt-16 text-center text-sm text-ink-muted">
-              This file has no strategic initiatives yet. Add one above.
-            </p>
+            person !== EVERYONE && (
+              <p className="mt-16 text-center text-sm text-ink-muted">
+                Nothing in this file involves {person}.
+              </p>
+            )
           )}
         </main>
       )}
@@ -311,22 +345,24 @@ export default function Page() {
 }
 
 function EmptyState({
+  onNew,
   onOpen,
   onExample,
   canSave,
 }: {
+  onNew: () => void
   onOpen: () => void
   onExample: () => void
   canSave: boolean | null
 }) {
   return (
     <div className="flex min-h-[85vh] flex-col items-center justify-center gap-6 text-center">
-      <Image src="/logo.png" alt="GreenOKR" width={220} height={129} priority />
+      <Wordmark size="large" />
       <div>
         <h2 className="text-lg font-medium">No file open</h2>
         <p className="mt-1 max-w-md text-sm text-ink-muted">
-          Open an OKR file from your computer. Everything happens in the browser —
-          nothing is uploaded anywhere.
+          Open an OKR file from your computer, or start a new one. Everything
+          happens in the browser — nothing is uploaded anywhere.
         </p>
       </div>
       <div className="flex gap-3">
@@ -340,10 +376,18 @@ function EmptyState({
         </button>
         <button
           type="button"
-          onClick={onExample}
+          onClick={onNew}
           className="flex items-center gap-2 rounded-md border border-line px-3 py-1.5 text-sm hover:border-ink-faint"
         >
           <FilePlus2 size={14} />
+          New OKR file
+        </button>
+        <button
+          type="button"
+          onClick={onExample}
+          className="flex items-center gap-2 rounded-md border border-line px-3 py-1.5 text-sm hover:border-ink-faint"
+        >
+          <Sprout size={14} />
           Load the example
         </button>
       </div>
@@ -365,6 +409,7 @@ function EditorHeader({
   people,
   person,
   onPerson,
+  onNew,
   onOpen,
   onSave,
 }: {
@@ -374,6 +419,7 @@ function EditorHeader({
   people: Person[]
   person: PersonFilter
   onPerson: (person: PersonFilter) => void
+  onNew: () => void
   onOpen: () => void
   onSave: () => void
 }) {
@@ -383,8 +429,9 @@ function EditorHeader({
         px-6 py-3 backdrop-blur"
     >
       <div className="flex items-center gap-4">
-        <Image src="/logo-mark.png" alt="" width={26} height={22} priority className="shrink-0" />
-        <h1 className="shrink-0 font-semibold">GreenOKR</h1>
+        <h1 className="shrink-0">
+          <Wordmark />
+        </h1>
 
         {file && (
           <span className="flex min-w-0 items-center gap-1.5 text-sm text-ink-muted">

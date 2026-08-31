@@ -9,7 +9,10 @@ import {
   addProgressNote,
   keyResultPath,
   objectivePath,
+  removeInitiative,
+  removeKeyResult,
   removeLink,
+  removeObjective,
   removeNote,
   setField,
   setInitiativeOwner,
@@ -73,6 +76,17 @@ strategic_initiatives:
 const initiative = ['strategic_initiatives', 0]
 const objective = objectivePath(0, 0)
 const keyResult = keyResultPath(0, 0, 0)
+
+/** A form draft with only the two fields that have no sensible default. */
+const draftFor = (id: string, title: string) => ({
+  id,
+  title,
+  description: '',
+  status: 'Not Started',
+  owner: '',
+  timeframe: '2026',
+  cadence: 'Weekly',
+})
 
 /** Every edit must leave the document valid and its comments intact. */
 function expectStillSound(doc: ReturnType<typeof parse>) {
@@ -394,16 +408,97 @@ describe('adding things', () => {
     expect(ids).toEqual(['KR1', 'KR2', 'KR3'])
   })
 
+  /**
+   * The fields only an author can supply are left out rather than written
+   * empty, so the report says what is missing instead of what is blank — and
+   * the file does not fill up with `target_measure: ""`.
+   */
   test('a new key result reports exactly what still needs filling in', () => {
     const doc = parse(BASE)
     addKeyResult(doc, objective)
     const errors = validate(doc).errors.join('\n')
 
-    expect(errors).toContain('TEK.O1.KR3.target_measure: must not be empty')
-    expect(errors).toContain('TEK.O1.KR3.target_date: must not be empty')
-    expect(errors).toContain('TEK.O1.KR3.owners: at least one owner is required')
+    expect(errors).toContain("TEK.O1.KR3: missing required field 'target_measure'")
+    expect(errors).toContain("TEK.O1.KR3: missing required field 'target_date'")
+    expect(errors).toContain("TEK.O1.KR3: missing required field 'owners'")
+    expect(stringify(doc)).not.toContain("''")
     // Nothing else is wrong with the document.
     expect(validate(doc).errors).toHaveLength(3)
+  })
+
+  /**
+   * A new key result has no `owners` map, so assigning somebody has to create
+   * one — otherwise the picker appears to work and writes nothing.
+   */
+  test('an owner can be assigned to a key result that has no owners yet', () => {
+    const doc = parse(BASE)
+    addKeyResult(doc, objective)
+    const fresh = keyResultPath(0, 0, 2)
+
+    setOwners(doc, fresh, 'accountable', ['roberto'])
+
+    const keyResults =
+      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results
+    expect(keyResults?.[2]?.owners?.accountable).toEqual(['roberto'])
+    // And it lands where SPEC.md puts it, after target_date.
+    const text = stringify(doc)
+    expect(text.indexOf('owners:', text.indexOf('id: KR3'))).toBeGreaterThan(
+      text.indexOf('id: KR3'),
+    )
+  })
+
+  test('a new initiative carries the defaults the form offered', () => {
+    const doc = parse(BASE)
+    addInitiative(doc, draftFor('pep', 'People'))
+
+    const added = toData(doc).strategic_initiatives?.[1]
+    expect(added?.review_cadence).toBe('Weekly')
+    expect(added?.status).toBe('Not Started')
+    expect(added?.timeframe).toBe('2026')
+    // Nothing was invented: no objectives, and no blank optional fields.
+    expect(added?.objectives).toEqual([])
+    expect(added?.owner).toBeUndefined()
+    expect(added?.description).toBeUndefined()
+  })
+
+  test('an initiative with nothing in it is a warning, not an error', () => {
+    const doc = parse(BASE)
+    addInitiative(doc, { ...draftFor('pep', 'People'), owner: 'roberto' })
+
+    const report = validate(doc)
+    expect(report.errors).toEqual([])
+    expect(report.warnings.join('\n')).toContain('PEP: has no objectives yet')
+  })
+
+  test('an owner left unset is still a missing required field', () => {
+    const doc = parse(BASE)
+    addInitiative(doc, draftFor('pep', 'People'))
+    expect(validate(doc).errors).toEqual(["PEP: missing required field 'owner'"])
+  })
+
+  /**
+   * A brand new file is written `strategic_initiatives: []`, which parses as a
+   * *flow* sequence — and a flow parent forces every descendant flow, so
+   * appending to one turned the whole subtree into a single bracket expression.
+   */
+  test('adding to an empty list writes block YAML, not brackets', () => {
+    const doc = parse('version: 1\nstrategic_initiatives: []\n')
+
+    addInitiative(doc, draftFor('tek', 'Technology'))
+    addObjective(doc, ['strategic_initiatives', 0])
+    addKeyResult(doc, ['strategic_initiatives', 0, 'objectives', 0])
+
+    const text = stringify(doc)
+    // Every record on its own lines, at its own depth.
+    expect(text).toContain('  - id: TEK')
+    expect(text).toContain('      - id: O1')
+    expect(text).toContain('          - id: KR1')
+    // No flow mappings: an empty `accountable: []` is fine, `- {id: TEK}` is not.
+    expect(text).not.toContain('{')
+    // Everything wrong with it is a field still to fill in.
+    expect(
+      validate(doc).errors.every((error) => /missing required field/.test(error)),
+    ).toBe(true)
   })
 
   test('a new objective arrives with one key result', () => {
@@ -417,11 +512,83 @@ describe('adding things', () => {
 
   test('a new initiative upper-cases its id', () => {
     const doc = parse(BASE)
-    addInitiative(doc, 'pep', 'People', '2026')
+    addInitiative(doc, draftFor('pep', 'People'))
     const initiatives = toData(doc).strategic_initiatives
     expect(initiatives?.[1]?.id).toBe('PEP')
     expect(initiatives?.[1]?.title).toBe('People')
     expect(initiatives?.[1]?.timeframe).toBe('2026')
+  })
+})
+
+describe('removing', () => {
+  test('a key result leaves the others in order', () => {
+    const doc = parse(BASE)
+    removeKeyResult(doc, objective, 0)
+
+    const keyResults =
+      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results
+    expect(keyResults?.map((keyResult) => keyResult.id)).toEqual(['KR2'])
+    expectStillSound(doc)
+  })
+
+  /**
+   * Deleting frees the id, and the next record takes it. Nothing records what
+   * once existed, so this cannot be prevented — it is the reason `Aborted`
+   * exists, and the reason to prefer it for work that was real.
+   */
+  test('frees the id, which the next record then takes', () => {
+    const doc = parse(BASE)
+    removeKeyResult(doc, objective, 1) // KR2 goes
+
+    addKeyResult(doc, objective)
+    const keyResults =
+      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results
+    // The new one is KR2 again, and is not the KR2 anybody wrote down.
+    expect(keyResults?.map((keyResult) => keyResult.id)).toEqual(['KR1', 'KR2'])
+  })
+
+  test('aborting instead keeps the id spoken for', () => {
+    const doc = parse(BASE)
+    // KR2 in the fixture is already Aborted, and still holds its number.
+    addKeyResult(doc, objective)
+    const keyResults =
+      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results
+    expect(keyResults?.map((keyResult) => keyResult.id)).toEqual(['KR1', 'KR2', 'KR3'])
+  })
+
+  test('an objective takes its key results with it', () => {
+    const doc = parse(BASE)
+    removeObjective(doc, initiative, 0)
+
+    expect(toData(doc).strategic_initiatives?.[0]?.objectives).toEqual([])
+    // Half-written, and said so — but not blocked.
+    const report = validate(doc)
+    expect(report.errors).toEqual([])
+    expect(report.warnings.join('\n')).toContain('has no objectives yet')
+  })
+
+  test('an initiative takes everything with it', () => {
+    const doc = parse(BASE)
+    removeInitiative(doc, 0)
+
+    expect(toData(doc).strategic_initiatives).toEqual([])
+    // An empty file is a valid file, so nothing is wrong with the result.
+    expect(validate(doc).errors).toEqual([])
+  })
+
+  test('leaves the roster alone — people outlive the work', () => {
+    const doc = parse(BASE)
+    removeInitiative(doc, 0)
+    expect(toData(doc).people).toContainEqual({ name: 'roberto' })
+  })
+
+  test('shrugs at an index that is not there', () => {
+    const doc = parse(BASE)
+    const before = stringify(doc)
+    removeKeyResult(doc, objective, 9)
+    removeObjective(doc, initiative, 9)
+    removeInitiative(doc, 9)
+    expect(stringify(doc)).toBe(before)
   })
 })
 

@@ -17,6 +17,7 @@ import {
   StatusBar,
   TextField,
 } from './fields.tsx'
+import { DeleteButton } from './delete-button.tsx'
 import { KeyResultRow } from './key-result.tsx'
 import { LabelPicker } from './label-picker.tsx'
 import { LinkRow } from './link-row.tsx'
@@ -54,12 +55,8 @@ export function ObjectiveCard({
   inherited: boolean
   editor: Editor
 }) {
-  const path: Path = [
-    'strategic_initiatives',
-    initiativeIndex,
-    'objectives',
-    objectiveIndex,
-  ]
+  const initiativePath: Path = ['strategic_initiatives', initiativeIndex]
+  const path: Path = [...initiativePath, 'objectives', objectiveIndex]
   const reference = `${initiativeId}.${objective.id ?? '?'}`
   const title = objective.title ?? ''
   // An objective that was just added has no title yet, so start it open.
@@ -99,15 +96,38 @@ export function ObjectiveCard({
 
       {open && (
         <>
-          <header className="flex items-start gap-3 px-4 pb-3 pl-[2.4rem]">
-            <div className="min-w-0 flex-1">
+          <header className="px-4 pb-3 pl-[2.4rem]">
+            <div className="flex items-center justify-between gap-3">
               <Reference id={reference} />
-              <TextField
-                value={title}
-                placeholder="The qualitative goal — what we want to improve"
-                onCommit={(value) => editor.setObjective(path, 'title', value)}
-                className="mt-1 font-medium"
+              <DeleteButton
+                what={`Objective ${reference} and its key results`}
+                onConfirm={() => editor.removeObjective(initiativePath, objectiveIndex)}
               />
+            </div>
+
+            {/* The bar reads against the title, which is what it measures —
+                not against the id above it. */}
+            <div className="mt-1 flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <TextField
+                  value={title}
+                  placeholder="The qualitative goal — what we want to improve"
+                  onCommit={(value) => editor.setObjective(path, 'title', value)}
+                  className="font-medium"
+                />
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <EnumSelect
+                  label={`${reference} status`}
+                  value={objective.status ?? ''}
+                  options={statusOptions(objective.status)}
+                  onChange={(value) => editor.setObjective(path, 'status', value)}
+                />
+                <ProgressBar progress={objectiveProgress(objective)} />
+              </div>
+            </div>
+
+            <div>
               <TextField
                 multiline
                 value={objective.description ?? ''}
@@ -119,15 +139,6 @@ export function ObjectiveCard({
               />
 
               <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-ink-faint">
-                <span className="flex items-center gap-1.5">
-                  status
-                  <EnumSelect
-                    label={`${reference} status`}
-                    value={objective.status ?? ''}
-                    options={statusOptions(objective.status)}
-                    onChange={(value) => editor.setObjective(path, 'status', value)}
-                  />
-                </span>
                 <span className="flex items-center gap-1.5">
                   theme
                   {/* One theme per objective, and optional, so it can be cleared. */}
@@ -157,8 +168,6 @@ export function ObjectiveCard({
                 </span>
               </div>
             </div>
-
-            <ProgressBar progress={objectiveProgress(objective)} />
           </header>
 
           {/* Links belong with the objective's own detail, above its key
@@ -190,6 +199,8 @@ export function ObjectiveCard({
                 keyResult={keyResult}
                 reference={`${reference}.${keyResult.id ?? '?'}`}
                 path={keyResultPath(initiativeIndex, objectiveIndex, index)}
+                objectivePath={path}
+                index={index}
                 timeframe={timeframe}
                 cadence={cadence}
                 people={pools.people}

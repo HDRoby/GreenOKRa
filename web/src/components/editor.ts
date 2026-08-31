@@ -1,4 +1,4 @@
-import type { Path } from '@/lib/edit.ts'
+import type { InitiativeDraft, Path } from '@/lib/edit.ts'
 import type { Person } from '@/lib/okr.ts'
 
 /**
@@ -29,7 +29,11 @@ export interface Editor {
   sortNotes(keyResult: Path): void
   addKeyResult(objective: Path): void
   addObjective(initiative: Path): void
-  addInitiative(id: string, title: string, timeframe: string): void
+  addInitiative(draft: InitiativeDraft): void
+
+  removeInitiative(index: number): void
+  removeObjective(initiative: Path, index: number): void
+  removeKeyResult(objective: Path, index: number): void
 
   addLink(objective: Path): void
   setLink(objective: Path, index: number, key: string, value: string): void

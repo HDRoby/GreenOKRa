@@ -4,19 +4,28 @@ import { Plus, X } from 'lucide-react'
 import { useState } from 'react'
 
 import {
+  type InitiativeDraft,
+  NEW_INITIATIVE,
+  statusOptions,
+  thisYear,
+} from '@/lib/edit.ts'
+import {
   type Indexed,
   type PersonFilter,
   ownsInitiative,
   visibleObjectives,
 } from '@/lib/filter.ts'
 import {
+  CADENCES,
   type Initiative,
+  type Person,
   decidedStatus,
   formatProgress,
   initiativeProgress,
 } from '@/lib/okr.ts'
 
-import { textToneFor } from './fields.tsx'
+import { EnumSelect, TimeframeSelect, textToneFor } from './fields.tsx'
+import { PersonPicker } from './person-picker.tsx'
 
 /**
  * One tab. Title, how many things are inside it, and how far along it is.
@@ -100,6 +109,8 @@ export function InitiativeTabs({
   person,
   onSelect,
   onAdd,
+  people,
+  onAddPerson,
 }: {
   /** Carrying their true positions, which may not be contiguous when filtered. */
   initiatives: Indexed<Initiative>[]
@@ -107,9 +118,16 @@ export function InitiativeTabs({
   /** So the objective count matches what opening the tab will actually show. */
   person: PersonFilter
   onSelect: (index: number) => void
-  onAdd: (id: string, title: string, timeframe: string) => void
+  onAdd: (draft: InitiativeDraft) => void
+  /** The roster, so the form can offer an owner. */
+  people: Person[]
+  onAddPerson: (person: Person) => string
 }) {
   const [adding, setAdding] = useState(false)
+  // A file with nothing in it needs no toggle: there is only one thing to do,
+  // so the form is simply open. A `+` to hunt for is what made a new file feel
+  // broken rather than empty.
+  const empty = initiatives.length === 0
 
   return (
     <div className="mb-5">
@@ -145,80 +163,163 @@ export function InitiativeTabs({
           )
         })}
 
-        <button
-          type="button"
-          onClick={() => setAdding(!adding)}
-          aria-label={adding ? 'Cancel new initiative' : 'New initiative'}
-          title="New strategic initiative"
-          className="ml-1 shrink-0 self-center rounded-md border border-line p-1
-            text-ink-faint hover:border-accent-dim hover:text-accent"
-        >
-          {adding ? <X size={14} /> : <Plus size={14} />}
-        </button>
+        {!empty && (
+          <button
+            type="button"
+            onClick={() => setAdding(!adding)}
+            aria-label={adding ? 'Cancel new initiative' : 'New initiative'}
+            title="New strategic initiative"
+            className="ml-1 shrink-0 self-center rounded-md border border-line p-1
+              text-ink-faint hover:border-accent-dim hover:text-accent"
+          >
+            {adding ? <X size={14} /> : <Plus size={14} />}
+          </button>
+        )}
       </div>
 
-      {adding && (
-        <NewInitiative
-          onAdd={(id, title, timeframe) => {
-            onAdd(id, title, timeframe)
-            setAdding(false)
-          }}
-        />
+      {(adding || empty) && (
+        <>
+          {empty && (
+            <p className="mt-4 text-sm text-ink-muted">
+              Name your first strategic initiative — a short code to refer to it
+              by, and what it is called.
+            </p>
+          )}
+          <NewInitiative
+            people={people}
+            onAddPerson={onAddPerson}
+            onAdd={(draft) => {
+              onAdd(draft)
+              setAdding(false)
+            }}
+          />
+        </>
       )}
     </div>
   )
 }
 
-/** New initiatives need an id up front, since ids are permanent. */
+/**
+ * Everything an initiative needs, asked for once.
+ *
+ * The card behind it can edit all of this too, but a record created half-blank
+ * and corrected afterwards is a record somebody forgets to correct. The
+ * defaults are the answers worth guessing; the id and the title are not.
+ */
 function NewInitiative({
+  people,
+  onAddPerson,
   onAdd,
 }: {
-  onAdd: (id: string, title: string, timeframe: string) => void
+  people: Person[]
+  onAddPerson: (person: Person) => string
+  onAdd: (draft: InitiativeDraft) => void
 }) {
-  const [id, setId] = useState('')
-  const [title, setTitle] = useState('')
-  const [timeframe, setTimeframe] = useState('')
-  const valid = /^[A-Za-z]{2,5}$/.test(id.trim()) && title.trim() !== ''
+  const [draft, setDraft] = useState<InitiativeDraft>({
+    id: '',
+    title: '',
+    description: '',
+    status: NEW_INITIATIVE.status,
+    owner: '',
+    timeframe: thisYear(),
+    cadence: NEW_INITIATIVE.cadence,
+  })
+  const set = (patch: Partial<InitiativeDraft>) =>
+    setDraft((current) => ({ ...current, ...patch }))
 
-  const add = () => {
-    if (!valid) return
-    onAdd(id, title, timeframe.trim() || String(new Date().getFullYear()))
-  }
+  // The id is permanent and the title is the label; nothing else is worth
+  // blocking on, since every field can be edited afterwards.
+  const valid = /^[A-Za-z]{2,5}$/.test(draft.id.trim()) && draft.title.trim() !== ''
 
   return (
-    <div className="mt-3 flex items-center gap-2 rounded-lg border border-dashed border-line p-3">
-      <input
-        autoFocus
-        value={id}
-        onChange={(event) => setId(event.target.value.toUpperCase())}
-        placeholder="ID"
-        maxLength={5}
-        title="Two to five letters, e.g. TEK"
-        className="field w-16 font-mono text-sm uppercase"
+    <div className="mt-3 space-y-2 rounded-lg border border-dashed border-line p-3">
+      <div className="flex items-center gap-2">
+        <input
+          autoFocus
+          value={draft.id}
+          onChange={(event) => set({ id: event.target.value.toUpperCase() })}
+          placeholder="ID"
+          maxLength={5}
+          aria-label="Initiative id"
+          title="Two to five letters, e.g. TEK. Permanent once written."
+          className="field w-14 shrink-0 font-mono text-sm uppercase"
+        />
+        <input
+          value={draft.title}
+          onChange={(event) => set({ title: event.target.value })}
+          onKeyDown={(event) => event.key === 'Enter' && valid && onAdd(draft)}
+          placeholder="Title"
+          aria-label="Initiative title"
+          // The size it will be once saved, so the form shows what you are making.
+          className="field flex-1 text-lg font-semibold"
+        />
+      </div>
+
+      <textarea
+        rows={2}
+        value={draft.description}
+        onChange={(event) => set({ description: event.target.value })}
+        placeholder="What this initiative is for (optional)"
+        aria-label="Initiative description"
+        className="field resize-y text-sm text-ink-muted"
       />
-      <input
-        value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        placeholder="New strategic initiative"
-        onKeyDown={(event) => event.key === 'Enter' && add()}
-        className="field flex-1 text-sm"
-      />
-      <input
-        value={timeframe}
-        onChange={(event) => setTimeframe(event.target.value)}
-        placeholder="2026"
-        onKeyDown={(event) => event.key === 'Enter' && add()}
-        className="field w-20 text-sm"
-      />
-      <button
-        onClick={add}
-        disabled={!valid}
-        className="flex shrink-0 items-center gap-1 rounded-md border border-line px-2.5
-          py-1 text-xs enabled:hover:border-accent-dim disabled:opacity-40"
-      >
-        <Plus size={12} />
-        Add
-      </button>
+
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-ink-faint">
+        <span className="flex items-center gap-1.5">
+          status
+          <EnumSelect
+            label="New initiative status"
+            value={draft.status}
+            options={statusOptions(draft.status)}
+            onChange={(status) => set({ status })}
+          />
+        </span>
+        <span className="flex items-center gap-1.5">
+          owner
+          <PersonPicker
+            identities={draft.owner ? [draft.owner] : []}
+            known={people}
+            multiple={false}
+            clearable
+            label="New initiative owner"
+            onChange={(chosen) => set({ owner: chosen[0] ?? '' })}
+            onEditPerson={() => {}}
+            onAddPerson={onAddPerson}
+          />
+        </span>
+        <span className="flex items-center gap-1.5">
+          timeframe
+          <TimeframeSelect
+            value={draft.timeframe}
+            onChange={(timeframe) => set({ timeframe })}
+          />
+        </span>
+        <span className="flex items-center gap-1.5">
+          review cadence
+          <EnumSelect
+            label="New initiative review cadence"
+            value={draft.cadence}
+            options={CADENCES}
+            onChange={(cadence) => set({ cadence })}
+          />
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-ink-faint">
+          Objectives are added afterwards.
+        </span>
+        <button
+          type="button"
+          onClick={() => valid && onAdd(draft)}
+          disabled={!valid}
+          className="flex shrink-0 items-center gap-1 rounded-md border border-line px-2.5
+            py-1 text-xs enabled:hover:border-accent-dim disabled:opacity-40"
+        >
+          <Plus size={12} />
+          Add
+        </button>
+      </div>
     </div>
   )
 }

@@ -33,6 +33,7 @@ import {
   textToneFor,
 } from './fields.tsx'
 import { PersonPicker } from './person-picker.tsx'
+import { DeleteButton } from './delete-button.tsx'
 import { ReviewBadge } from './review-badge.tsx'
 import { TargetDate } from './target-date.tsx'
 
@@ -50,6 +51,8 @@ export function KeyResultRow({
   keyResult,
   reference,
   path,
+  objectivePath,
+  index,
   timeframe,
   cadence,
   people,
@@ -59,6 +62,9 @@ export function KeyResultRow({
   keyResult: KeyResult
   reference: string
   path: Path
+  /** Where it lives, so it can be removed from its list. */
+  objectivePath: Path
+  index: number
   timeframe: string | undefined
   cadence: string | undefined
   people: Person[]
@@ -109,27 +115,38 @@ export function KeyResultRow({
           {/* The dotted id heads the open card, where an objective and an
               initiative carry theirs. On the collapsed row it was the same
               string on every line, spending width to say nothing. */}
-          <div>
+          <div className="flex items-center justify-between gap-3">
             <Reference id={reference} />
+            <DeleteButton
+              what={`Key result ${reference}`}
+              onConfirm={() => editor.removeKeyResult(objectivePath, index)}
+            />
           </div>
-          <TextField
-            multiline
-            value={measure}
-            placeholder="What is measured, and the target that counts as success"
-            onCommit={(value) => editor.setKeyResult(path, 'target_measure', value)}
-            className="text-sm leading-relaxed"
-          />
 
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-ink-faint">
-            <label className="flex items-center gap-1.5">
-              status
+          {/* Status sits with the measure — a key result's equivalent of a
+              title — as it does beside an objective's. `items-start` keeps it
+              on the first line as the text grows. */}
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <TextField
+                multiline
+                value={measure}
+                placeholder="What is measured, and the target that counts as success"
+                onCommit={(value) => editor.setKeyResult(path, 'target_measure', value)}
+                className="text-sm leading-relaxed"
+              />
+            </div>
+            <div className="mt-0.5 shrink-0">
               <EnumSelect
                 label={`${reference} status`}
                 value={status}
                 options={STATUSES}
                 onChange={(value) => editor.setKeyResult(path, 'status', value)}
               />
-            </label>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-ink-faint">
             <label className="flex items-center gap-1.5">
               priority
               <EnumSelect

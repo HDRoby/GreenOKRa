@@ -135,13 +135,13 @@ choices, because only those are decisions. Either can be undone.
 Everything is validated as you type, and the counter in the header opens a panel
 listing errors, warnings and anything that was tidied.
 
-### One deliberate omission
+### Aborting and deleting
 
-**You cannot delete an initiative, objective or key result.** Ids must stay
-stable — a ticket referencing `TEK.O1.KR2` should still resolve next year.
-Dropped work is set to `Aborted`, which excludes it from progress while keeping
-its id. Numbering never reuses a retired id either: abort `KR2` and the next key
-result is `KR3`.
+Initiatives, objectives and key results can be deleted, behind a confirmation.
+But **prefer `Aborted` for work that was real**: it drops out of every rollup
+while keeping its id spoken for, so a ticket referencing `TEK.O1.KR2` still
+finds what it meant. Deleting frees the id, and the next key result added takes
+it — pointing that ticket at something else.
 
 Progress notes are ordinary editable fields. Re-dating one re-sorts the log, so
 it stays newest-first, and clearing a note's text deletes the entry — which is

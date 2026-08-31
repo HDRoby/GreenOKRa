@@ -387,6 +387,53 @@ describe('errors', () => {
     )
   })
 
+  /**
+   * A file with no initiatives yet is what "start from scratch" produces.
+   * Reporting it as an error made a new file look broken on arrival.
+   */
+  test('accepts a file with no initiatives yet', () => {
+    const report = validate(parse('version: 1\nstrategic_initiatives: []\n'))
+    expect(report.errors).toEqual([])
+    expect(report.warnings).toEqual([])
+    expect(report.fixes).toEqual([])
+  })
+
+  test('still insists the key is there, and is a list', () => {
+    expect(validate(parse('version: 1\n')).errors).toEqual([
+      'file.strategic_initiatives: expected a list',
+    ])
+    expect(validate(parse('version: 1\nstrategic_initiatives: nope\n')).errors).toEqual([
+      'file.strategic_initiatives: expected a list',
+    ])
+  })
+
+  /**
+   * A file is built downwards, so a container exists before its contents.
+   * Empty is worth saying, not worth blocking on.
+   */
+  const SKELETON = `version: 1
+people:
+  - {name: roberto}
+strategic_initiatives:
+  - id: TEK
+    title: Technology
+    owner: roberto
+    timeframe: "2026"
+    status: Not Started
+    objectives: []
+`
+
+  test('an empty container warns rather than errors', () => {
+    const report = validate(parse(SKELETON))
+    expect(report.errors).toEqual([])
+    expect(report.warnings.join('\n')).toContain('TEK: has no objectives yet')
+  })
+
+  test('but a container that is not a list is still an error', () => {
+    const report = validate(parse(SKELETON.replace('objectives: []', 'objectives: nope')))
+    expect(report.errors.join('\n')).toContain('objectives: expected a list')
+  })
+
   test('rejects a file that is not a mapping', () => {
     expect(validate(parse('- just\n- a list\n')).errors.join()).toContain(
       'expected a mapping at the top level',

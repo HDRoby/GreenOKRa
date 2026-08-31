@@ -74,7 +74,12 @@ Top level:
 |---|---|---|
 | `version` | no | Format version. Defaults to `1`. |
 | `people` | no | Everyone the OKRs refer to, defined once. See [People](#people). |
-| `strategic_initiatives` | yes | List of Strategic Initiatives. |
+| `strategic_initiatives` | yes | List of Strategic Initiatives. May be empty — that is what a file looks like before the first one is named. |
+
+A file is built downwards: an initiative is named before it has objectives, and
+an objective before it has key results. So an empty list at any level is legal.
+It is reported as a warning rather than an error, except at the top, where an
+empty file is simply a new one.
 
 ---
 
@@ -89,7 +94,7 @@ Top level:
 | `review_cadence` | no | How often the work is looked at: `Weekly`, `Bi-Weekly`, `Monthly`, `Quarterly`, `6 Months`, `Yearly`. |
 | `status` | yes | See [Status](#status). |
 | `description` | no | Free-form context. |
-| `objectives` | yes | List of Objectives. At least one. |
+| `objectives` | yes | List of Objectives. May be empty while the initiative is being written; the report says so. |
 
 `progress` is **not** a field — it is computed. See [Progress](#progress).
 
@@ -106,7 +111,7 @@ Top level:
 | `owners` | no | References into [people](#people). Optional because it is usually the union of the Objective's Key Result owners; set it only when you want to state it explicitly. |
 | `status` | yes | See [Status](#status). |
 | `links` | no | List of `{title, url}` — Confluence pages, decision records, dashboards. |
-| `key_results` | yes | List of Key Results. At least one. |
+| `key_results` | yes | List of Key Results. May be empty while the objective is being written; the report says so. |
 
 There is deliberately **no timeframe** on an Objective. Timing lives on each Key
 Result's `target_date`.
@@ -333,12 +338,22 @@ to at most `95%`, so a nearly finished initiative never claims to be done.
 | Key Result | `^KR[0-9]+$` | Within its objective |
 
 Ids are **stable**: once written, never renumber. Reordering a list is free;
-changing an id breaks every document, ticket, and note that references it. When
-something is dropped, set its status to `Aborted` and leave the id in place —
-never reuse it.
+changing an id breaks every document, ticket, and note that references it.
 
 Numbering is expected to be sequential but gaps are legal, precisely because
 aborted items keep their ids.
+
+### Aborting and deleting are different
+
+Work that happened and then stopped should be set to `Aborted`. It disappears
+from every rollup, and its id stays spoken for, so the ticket that mentions
+`TEK.O1.KR2` still finds the thing it meant.
+
+Deleting removes the record outright, and **frees its id**. Nothing records what
+used to exist, so the next Key Result added becomes `KR2` again — and anything
+that referred to the old one now points somewhere else entirely.
+
+Delete what was never really there. Abort what was.
 
 ---
 

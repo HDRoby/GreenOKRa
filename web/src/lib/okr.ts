@@ -772,10 +772,14 @@ export function validate(doc: Document): Report {
   }
 
   const initiatives = root.get('strategic_initiatives', true)
-  if (!isSeq(initiatives) || initiatives.items.length === 0) {
-    report.error('file.strategic_initiatives: expected a non-empty list')
+  if (!isSeq(initiatives)) {
+    report.error('file.strategic_initiatives: expected a list')
     return report
   }
+  // An empty list is fine: that is what a file looks like before its first
+  // initiative is named, and greeting somebody with an error for starting is
+  // no help. The levels below stay strict — an initiative with no objectives,
+  // or an objective with no key results, is genuinely half-written.
 
   const seen = new Map<string, string>()
   initiatives.items.forEach((item, index) => {
@@ -821,9 +825,14 @@ function validateInitiative(
   enumField(initiative, 'status', STATUSES, prefix, report)
 
   const objectives = initiative.get('objectives', true)
-  if (!isSeq(objectives) || objectives.items.length === 0) {
-    report.error(`${prefix}.objectives: expected a non-empty list`)
+  if (!isSeq(objectives)) {
+    report.error(`${prefix}.objectives: expected a list`)
     return initiativeId
+  }
+  // Empty is a warning, not an error: a file is built downwards, so a container
+  // exists before its contents. Worth saying, not worth blocking.
+  if (objectives.items.length === 0) {
+    report.warn(`${prefix}: has no objectives yet`)
   }
 
   const seen = new Map<string, string>()
@@ -874,9 +883,12 @@ function validateObjective(
   validateLinks(objective, prefix, report)
 
   const keyResults = objective.get('key_results', true)
-  if (!isSeq(keyResults) || keyResults.items.length === 0) {
-    report.error(`${prefix}.key_results: expected a non-empty list`)
+  if (!isSeq(keyResults)) {
+    report.error(`${prefix}.key_results: expected a list`)
     return objectiveId
+  }
+  if (keyResults.items.length === 0) {
+    report.warn(`${prefix}: has no key results yet`)
   }
 
   const seen = new Map<string, string>()

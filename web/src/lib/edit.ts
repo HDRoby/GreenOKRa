@@ -110,8 +110,21 @@ export function setOwners(
   role: string,
   identities: string[],
 ): void {
-  const owners = doc.getIn([...keyResult, 'owners'], true)
-  if (!isMap(owners)) return
+  const keyResultMap = doc.getIn(keyResult, true)
+  if (!isMap(keyResultMap)) return
+
+  // A key result need not already have an `owners` map — a new one does not,
+  // and nor does a hand-written file. Without creating it, assigning somebody
+  // would appear to work and write nothing.
+  const found = keyResultMap.get('owners', true)
+  let owners: YAMLMap
+  if (isMap(found)) {
+    owners = found
+  } else {
+    if (identities.length === 0) return
+    owners = new YAMLMap()
+    insertOrdered(keyResultMap, 'owners', owners, KR_KEYS)
+  }
 
   if (identities.length === 0) {
     owners.items = owners.items.filter((pair) => keyOf(pair) !== role)
@@ -428,33 +441,49 @@ function nextIdentifier(list: YAMLSeq, prefix: string): string {
   return `${prefix}${highest + 1}`
 }
 
+/**
+ * A new record leaves out the fields only the author can supply, rather than
+ * writing them empty.
+ *
+ * `target_measure: ""` reads as set-to-nothing and clutters the file; leaving
+ * it out gets the clearer error — "missing required field" — and the editor
+ * shows an empty control either way. Fields with a defensible default get one.
+ */
 function blankKeyResult(doc: Document, id: string) {
-  // Required fields are left empty on purpose: the validation panel then names
-  // exactly what still needs filling in.
   return doc.createNode({
     id,
-    target_measure: '',
-    target_date: '',
-    owners: { accountable: [] },
     status: 'Not Started',
     priority: 'Medium',
     complexity: 'Medium',
   })
 }
 
+/**
+ * A record belongs on its own lines.
+ *
+ * An empty list written `[]` parses as a flow sequence, and a flow parent forces
+ * every descendant flow — so appending to one turns the whole subtree into a
+ * single unreadable bracket expression. Adding a mapping is always a block
+ * operation.
+ */
+function asBlock(list: YAMLSeq): YAMLSeq {
+  list.flow = false
+  return list
+}
+
 export function addKeyResult(doc: Document, objective: Path): void {
   const list = doc.getIn([...objective, 'key_results'], true)
   if (!isSeq(list)) return
-  list.items.push(blankKeyResult(doc, nextIdentifier(list, 'KR')))
+  asBlock(list).items.push(blankKeyResult(doc, nextIdentifier(list, 'KR')))
 }
 
 export function addObjective(doc: Document, initiative: Path): void {
   const list = doc.getIn([...initiative, 'objectives'], true)
   if (!isSeq(list)) return
+  asBlock(list)
   const id = nextIdentifier(list, 'O')
   const objective = doc.createNode({
     id,
-    title: '',
     status: 'Not Started',
     key_results: [],
   })
@@ -463,35 +492,35 @@ export function addObjective(doc: Document, initiative: Path): void {
   list.items.push(objective)
 }
 
-export function addInitiative(
-  doc: Document,
-  id: string,
-  title: string,
-  timeframe: string,
-): void {
+/**
+ * Add an initiative from what the form collected.
+ *
+ * It arrives with no objectives. A file is built downwards — you name the
+ * initiative, then say what it is trying to do — and inventing an O1 and a KR1
+ * for somebody to edit away helps nobody. Validation notes it has none yet.
+ */
+export function addInitiative(doc: Document, draft: InitiativeDraft): void {
   const list = doc.getIn(['strategic_initiatives'], true)
   if (!isSeq(list)) return
-  const initiative = doc.createNode({
-    id: id.trim().toUpperCase(),
-    title: title.trim(),
-    owner: '',
-    timeframe: timeframe.trim(),
-    status: 'Not Started',
-    objectives: [],
-  })
-  const objectives = initiative.get('objectives', true)
-  if (isSeq(objectives)) {
-    const objective = doc.createNode({
-      id: 'O1',
-      title: '',
-      status: 'Not Started',
-      key_results: [],
-    })
-    const keyResults = objective.get('key_results', true)
-    if (isSeq(keyResults)) keyResults.items.push(blankKeyResult(doc, 'KR1'))
-    objectives.items.push(objective)
+  asBlock(list)
+
+  // In SPEC.md's field order, and only what was given: an empty optional field
+  // is left out rather than written blank.
+  const initiative: Record<string, unknown> = {
+    id: draft.id.trim().toUpperCase(),
+    title: draft.title.trim(),
   }
-  list.items.push(initiative)
+  if (draft.owner.trim()) initiative.owner = draft.owner.trim()
+  initiative.timeframe = draft.timeframe.trim() || thisYear()
+  if (draft.cadence.trim()) initiative.review_cadence = draft.cadence.trim()
+  initiative.status = draft.status.trim() || NEW_INITIATIVE.status
+  if (draft.description.trim()) initiative.description = draft.description.trim()
+  initiative.objectives = []
+
+  // The empty list stays flow, so it reads `objectives: []` rather than a
+  // bracket stranded on the next line. `addObjective` makes it block when it
+  // has something to put there.
+  list.add(doc.createNode(initiative))
 }
 
 // ------------------------------------------------------------------------- //
@@ -503,6 +532,29 @@ export function addInitiative(
  * below: an objective from its key results, an initiative from its objectives.
  */
 export const STATUS_DECISIONS = ['Completed', 'Aborted'] as const
+
+/** What a new initiative carries until somebody says otherwise. */
+export const NEW_INITIATIVE = {
+  status: 'Not Started',
+  cadence: 'Weekly',
+} as const
+
+/** The current year, which a new initiative's timeframe defaults to. */
+export function thisYear(): string {
+  return String(new Date().getFullYear())
+}
+
+/** Everything a new initiative needs, as the form collects it. */
+export interface InitiativeDraft {
+  id: string
+  title: string
+  description: string
+  status: string
+  /** A reference into the roster, or empty for not set. */
+  owner: string
+  timeframe: string
+  cadence: string
+}
 
 /**
  * Advance a `Not Started` parent to `In Progress` once any child has begun.
@@ -596,6 +648,40 @@ export function statusOptions(current: string | undefined): string[] {
     ]
   }
   return status ? [status, ...STATUS_DECISIONS] : [...STATUS_DECISIONS]
+}
+
+// ------------------------------------------------------------------------- //
+// Removing
+// ------------------------------------------------------------------------- //
+
+/**
+ * Remove a record.
+ *
+ * Deleting frees its id. Numbering counts the records that are there, and
+ * nothing remembers what once was, so removing `KR2` means the next key result
+ * is `KR2` again — pointing anything that referred to the old one at a
+ * different thing entirely.
+ *
+ * That is the cost of deleting rather than aborting, and it is why `Aborted`
+ * exists: it drops the work from every rollup while keeping the id spoken for.
+ * Delete what was never really there; abort what was.
+ */
+function removeAt(doc: Document, list: Path, index: number): void {
+  const seq = doc.getIn(list, true)
+  if (!isSeq(seq)) return
+  seq.items.splice(index, 1)
+}
+
+export function removeInitiative(doc: Document, index: number): void {
+  removeAt(doc, ['strategic_initiatives'], index)
+}
+
+export function removeObjective(doc: Document, initiative: Path, index: number): void {
+  removeAt(doc, [...initiative, 'objectives'], index)
+}
+
+export function removeKeyResult(doc: Document, objective: Path, index: number): void {
+  removeAt(doc, [...objective, 'key_results'], index)
 }
 
 export const FIELD_ORDER = {

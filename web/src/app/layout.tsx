@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'GreenOKR',
+  title: 'GreenOKRa',
   description: 'View and edit OKR files',
 }
 

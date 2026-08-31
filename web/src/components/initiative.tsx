@@ -19,6 +19,7 @@ import {
   TextField,
   TimeframeSelect,
 } from './fields.tsx'
+import { DeleteButton } from './delete-button.tsx'
 import { PersonPicker } from './person-picker.tsx'
 import { ObjectiveCard } from './objective.tsx'
 
@@ -45,9 +46,17 @@ export function InitiativeCard({
   return (
     <article className="space-y-4">
       <header className="rounded-xl border border-line bg-surface p-4">
-        <div className="flex items-start gap-3">
-          <Reference id={id} className="mt-1.5 !bg-accent-dim/25 !text-ink" />
+        {/* The id and the way to delete it share a line: what is being removed
+            is named right beside the control that removes it. */}
+        <div className="flex items-center justify-between gap-3">
+          <Reference id={id} className="!bg-accent-dim/25 !text-ink" />
+          <DeleteButton
+            what={`Initiative ${id} and everything in it`}
+            onConfirm={() => editor.removeInitiative(index)}
+          />
+        </div>
 
+        <div className="mt-2 flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <TextField
               value={initiative.title ?? ''}
