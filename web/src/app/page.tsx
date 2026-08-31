@@ -1,6 +1,7 @@
 'use client'
 
-import { FileDown, FilePlus2, FolderOpen, Save, Sprout } from 'lucide-react'
+import { FileDown, FilePlus2, FolderOpen, Save } from 'lucide-react'
+import Image from 'next/image'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Document } from 'yaml'
 
@@ -168,7 +169,14 @@ export default function Page() {
   return (
     <div className="mx-auto min-h-screen max-w-5xl px-6 pb-24">
       <header className="sticky top-0 z-10 -mx-6 mb-6 flex items-center gap-4 border-b border-line bg-canvas/90 px-6 py-3 backdrop-blur">
-        <Sprout size={18} className="shrink-0 text-accent" />
+        <Image
+          src="/logo-mark.png"
+          alt=""
+          width={26}
+          height={22}
+          priority
+          className="shrink-0"
+        />
         <h1 className="shrink-0 font-semibold">GreenOKRa</h1>
 
         {file && (
@@ -252,7 +260,7 @@ function EmptyState({
 }) {
   return (
     <div className="mt-24 flex flex-col items-center gap-6 text-center">
-      <Sprout size={40} className="text-accent-dim" />
+      <Image src="/logo.png" alt="GreenOKRa" width={220} height={129} priority />
       <div>
         <h2 className="text-lg font-medium">No file open</h2>
         <p className="mt-1 max-w-md text-sm text-ink-muted">
