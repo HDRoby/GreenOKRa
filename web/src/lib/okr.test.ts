@@ -25,10 +25,12 @@ const SAMPLE_PATH = new URL('../../../okrs/2026.yaml', import.meta.url)
 const sampleText = () => readFileSync(SAMPLE_PATH, 'utf8')
 
 const BASE = `version: 1
+people:
+  - {name: roberto}
 strategic_initiatives:
   - id: TEK
     title: Technology
-    owner: {name: roberto}
+    owner: roberto
     timeframe: "2026"
     status: In Progress
     objectives:
@@ -41,7 +43,7 @@ strategic_initiatives:
             target_date: Q3
             owners:
               accountable:
-                - {name: roberto}
+                - roberto
             status: In Progress
             priority: High
             complexity: Medium
@@ -162,34 +164,60 @@ describe('autocorrect', () => {
   })
 
   /**
-   * People used to be plain names. A file still written that way opens and
-   * upgrades itself, so nobody has to migrate by hand.
+   * People were once written inline, and before that were plain names. Either
+   * way the file opens, collects everyone into the roster, and leaves
+   * references behind.
    */
-  test('upgrades a bare name into the name/email shape', () => {
-    const doc = base('              accountable:\n                - {name: roberto}', '              accountable: [roberto]')
+  test('collects an inline person into the roster', () => {
+    const doc = base(
+      '                - roberto',
+      '                - {name: maria, email: maria@example.com}',
+    )
     const report = validate(doc)
 
-    expect(report.ok).toBe(true)
-    expect(report.fixes.join('\n')).toContain('given the name/email shape')
-    const keyResult =
-      toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results?.[0]
-    expect(keyResult?.owners).toEqual({ accountable: [{ name: 'roberto' }] })
+    expect(report.errors).toEqual([])
+    expect(report.fixes.join('\n')).toContain("'maria' moved into people")
+
+    const data = toData(doc)
+    expect(data.people).toContainEqual({ name: 'maria', email: 'maria@example.com' })
+    // What is left behind is a reference, not a copy.
+    expect(
+      data.strategic_initiatives?.[0]?.objectives?.[0]?.key_results?.[0]?.owners
+        ?.accountable,
+    ).toEqual(['maria@example.com'])
   })
 
-  test('upgrades a bare name in a single-person field', () => {
-    const doc = base('    owner: {name: roberto}', '    owner: roberto')
+  test('adds an unknown name to the roster rather than rejecting it', () => {
+    const doc = base('                - roberto', '                - hand.typed')
     const report = validate(doc)
 
-    expect(report.ok).toBe(true)
-    expect(toData(doc).strategic_initiatives?.[0]?.owner).toEqual({ name: 'roberto' })
+    expect(report.errors).toEqual([])
+    expect(report.fixes.join('\n')).toContain("'hand.typed' added to people")
+    expect(toData(doc).people).toContainEqual({ name: 'hand.typed' })
+  })
+
+  test('defines somebody once however many times they are named', () => {
+    const doc = base(
+      '            owners:\n              accountable:\n                - roberto',
+      '            owners:\n              accountable:\n                - roberto\n              responsible:\n                - roberto\n              consult:\n                - roberto',
+    )
+    validate(doc)
+
+    const roster = toData(doc).people ?? []
+    expect(roster.filter((person) => person.name === 'roberto')).toHaveLength(1)
   })
 
   test('rejects an address that is not one', () => {
     const doc = base(
-      '                - {name: roberto}',
-      '                - {name: roberto, email: not-an-address}',
+      '  - {name: roberto}',
+      '  - {name: roberto, email: not-an-address}',
     )
     expect(validate(doc).errors.join('\n')).toContain("'not-an-address' is not an email")
+  })
+
+  test('rejects the same person listed twice', () => {
+    const doc = base('  - {name: roberto}', '  - {name: roberto}\n  - {name: roberto}')
+    expect(validate(doc).errors.join('\n')).toContain('in the roster more than once')
   })
 
   test('leaves the document alone when there is nothing to repair', () => {
@@ -235,7 +263,7 @@ describe('the old role names', () => {
   test('are renamed as a repair, not rejected', () => {
     const doc = base(
       '              accountable:',
-      '              consulted:\n                - {name: maria}\n              accountable:',
+      '              consulted:\n                - maria\n              accountable:',
     )
     const report = validate(doc)
 
@@ -244,19 +272,19 @@ describe('the old role names', () => {
 
     const keyResult =
       toData(doc).strategic_initiatives?.[0]?.objectives?.[0]?.key_results?.[0]
-    expect(keyResult?.owners?.consult).toEqual([{ name: 'maria' }])
+    expect(keyResult?.owners?.consult).toEqual(['maria'])
   })
 
   test('keep the people under them and the position of the field', () => {
     const doc = base(
       '              accountable:',
-      '              informed:\n                - {name: cto}\n              accountable:',
+      '              informed:\n                - cto\n              accountable:',
     )
     validate(doc)
 
     const text = stringify(doc)
     expect(text).toContain('inform:')
-    expect(text).toContain('{name: cto}')
+    expect(text).toContain('- cto')
     // Renamed in place: still the first role listed.
     expect(text.indexOf('inform:')).toBeLessThan(text.indexOf('accountable:'))
   })

@@ -12,7 +12,6 @@
 
 import { Document, Pair, Scalar, YAMLMap, YAMLSeq, isMap, isScalar, isSeq } from 'yaml'
 
-import { personKey } from './labels.ts'
 import {
   KR_KEYS,
   OBJECTIVE_KEYS,
@@ -22,6 +21,7 @@ import {
   STATUSES,
   UNDER_WAY,
   canonical,
+  personKey,
 } from './okr.ts'
 
 export type Path = (string | number)[]
@@ -103,39 +103,24 @@ export function setOptionalField(
   setField(doc, parent, key, value, order)
 }
 
-/** A person as a one-line flow mapping, which is how they are written. */
-function personNode(person: Person): YAMLMap {
-  const map = new YAMLMap()
-  map.flow = true
-  const name = person.name?.trim() ?? ''
-  map.add(new Pair(new Scalar('name'), new Scalar(name)))
-  const email = person.email?.trim()
-  if (email) map.add(new Pair(new Scalar('email'), new Scalar(email)))
-  return map
-}
-
-function peopleNode(people: Person[]): YAMLSeq {
-  const list = new YAMLSeq()
-  for (const person of people) list.add(personNode(person))
-  return list
-}
-
-/** Replace one RACI role's list of people. Clearing it removes the role. */
+/** Replace one RACI role's people. Clearing it removes the role. */
 export function setOwners(
   doc: Document,
   keyResult: Path,
   role: string,
-  people: Person[],
+  identities: string[],
 ): void {
   const owners = doc.getIn([...keyResult, 'owners'], true)
   if (!isMap(owners)) return
 
-  if (people.length === 0) {
+  if (identities.length === 0) {
     owners.items = owners.items.filter((pair) => keyOf(pair) !== role)
     return
   }
 
-  const list = peopleNode(people)
+  const list = new YAMLSeq()
+  for (const identity of identities) list.add(new Scalar(identity))
+
   const existing = owners.items.find((pair) => keyOf(pair) === role)
   if (existing) {
     existing.value = list
@@ -144,21 +129,23 @@ export function setOwners(
   }
 }
 
-/** Replace an objective's list of owners. */
+/** Replace an objective's owners. */
 export function setObjectiveOwners(
   doc: Document,
   objective: Path,
-  people: Person[],
+  identities: string[],
 ): void {
   const map = doc.getIn(objective, true)
   if (!isMap(map)) return
 
-  if (people.length === 0) {
+  if (identities.length === 0) {
     map.items = map.items.filter((pair) => keyOf(pair) !== 'owners')
     return
   }
 
-  const list = peopleNode(people)
+  const list = new YAMLSeq()
+  for (const identity of identities) list.add(new Scalar(identity))
+
   const existing = map.items.find((pair) => keyOf(pair) === 'owners')
   if (existing) {
     existing.value = list
@@ -171,73 +158,119 @@ export function setObjectiveOwners(
 export function setInitiativeOwner(
   doc: Document,
   initiative: Path,
-  person: Person | null,
+  identity: string | null,
 ): void {
   const map = doc.getIn(initiative, true)
   if (!isMap(map)) return
 
-  if (person === null) {
+  if (identity === null) {
     map.items = map.items.filter((pair) => keyOf(pair) !== 'owner')
     return
   }
+  setField(doc, initiative, 'owner', identity, SI_KEYS)
+}
 
-  const existing = map.items.find((pair) => keyOf(pair) === 'owner')
-  if (existing) {
-    existing.value = personNode(person)
+/** Add somebody to the roster, if they are not already in it. */
+export function addPerson(doc: Document, person: Person): string {
+  const identity = personKey(person)
+  if (!identity) return ''
+
+  const root = doc.contents
+  if (!isMap(root)) return identity
+
+  const existing = root.get('people', true)
+  let roster: YAMLSeq
+  if (isSeq(existing)) {
+    roster = existing
   } else {
-    insertOrdered(map, 'owner', personNode(person), SI_KEYS)
+    roster = new YAMLSeq()
+    const at = root.items.findIndex((pair) => keyOf(pair) === 'strategic_initiatives')
+    const pair = new Pair(new Scalar('people'), roster)
+    if (at === -1) root.items.push(pair)
+    else root.items.splice(at, 0, pair)
   }
+
+  const already = roster.items.some(
+    (item) => isMap(item) && personKey(item.toJSON() as Person) === identity,
+  )
+  if (!already) roster.add(personNode(person))
+  return identity
+}
+
+/** A roster entry as a one-line flow mapping, which is how they are written. */
+function personNode(person: Person): YAMLMap {
+  const map = new YAMLMap()
+  map.flow = true
+  map.add(new Pair(new Scalar('name'), new Scalar(person.name?.trim() ?? '')))
+  const email = person.email?.trim()
+  if (email) map.add(new Pair(new Scalar('email'), new Scalar(email)))
+  return map
 }
 
 /**
- * Update one person everywhere they appear.
+ * Correct somebody in the roster.
  *
- * A person's address is their identity, so correcting it in one key result
- * should not leave nineteen others pointing at the old one. Matched by identity
- * rather than by name, which is the thing being corrected. Returns how many
- * entries changed.
+ * Their entry is the only definition, so the name and address change in one
+ * place. The identity can change too — adding an address to a name-only person
+ * moves them from being known by name to being known by address — and every
+ * reference has to follow, or the OKRs would point at somebody who no longer
+ * exists. Returns how many references were rewritten.
  */
 export function updatePerson(
   doc: Document,
   identity: string,
   person: Person,
 ): number {
+  const root = doc.contents
+  if (!isMap(root)) return 0
+
+  const roster = root.get('people', true)
+  if (isSeq(roster)) {
+    const at = roster.items.findIndex(
+      (item) => isMap(item) && personKey(item.toJSON() as Person) === identity,
+    )
+    if (at === -1) return 0
+    roster.items[at] = personNode(person)
+  }
+
+  const renamed = personKey(person)
+  if (renamed === identity) return 0
+
   let changed = 0
-  const replace = (holder: unknown, key: string) => {
+  const rewrite = (holder: unknown, key: string) => {
     if (!isMap(holder)) return
-    const list = holder.get(key, true)
-    if (isSeq(list)) {
-      list.items.forEach((item, index) => {
-        if (isMap(item) && personKey(item.toJSON() as Person) === identity) {
-          list.items[index] = personNode(person)
+    const node = holder.get(key, true)
+    if (isSeq(node)) {
+      node.items.forEach((item, index) => {
+        if (isScalar(item) && item.value === identity) {
+          node.items[index] = new Scalar(renamed)
           changed += 1
         }
       })
       return
     }
-    if (isMap(list) && personKey(list.toJSON() as Person) === identity) {
-      holder.set(key, personNode(person))
+    if (isScalar(node) && node.value === identity) {
+      node.value = renamed
       changed += 1
     }
   }
 
-  const initiatives = doc.getIn(['strategic_initiatives'], true)
-  if (!isSeq(initiatives)) return 0
-
+  const initiatives = root.get('strategic_initiatives', true)
+  if (!isSeq(initiatives)) return changed
   for (const initiative of initiatives.items) {
     if (!isMap(initiative)) continue
-    replace(initiative, 'owner')
+    rewrite(initiative, 'owner')
     const objectives = initiative.get('objectives', true)
     if (!isSeq(objectives)) continue
     for (const objective of objectives.items) {
       if (!isMap(objective)) continue
-      replace(objective, 'owners')
+      rewrite(objective, 'owners')
       const keyResults = objective.get('key_results', true)
       if (!isSeq(keyResults)) continue
       for (const keyResult of keyResults.items) {
         if (!isMap(keyResult)) continue
         const owners = keyResult.get('owners', true)
-        for (const role of RACI_ROLES) replace(owners, role)
+        for (const role of RACI_ROLES) rewrite(owners, role)
       }
     }
   }

@@ -1,7 +1,5 @@
 'use client'
 
-import { useState } from 'react'
-
 import { initiativePath, statusOptions } from '@/lib/edit.ts'
 import {
   EVERYONE,
@@ -14,6 +12,7 @@ import { CADENCES, type Initiative, initiativeProgress } from '@/lib/okr.ts'
 
 import type { Editor } from './editor.ts'
 import {
+  AddButton,
   EnumSelect,
   ProgressBar,
   Reference,
@@ -21,7 +20,6 @@ import {
   TimeframeSelect,
 } from './fields.tsx'
 import { PersonPicker } from './person-picker.tsx'
-import { ObjectiveTabs } from './tabs.tsx'
 import { ObjectiveCard } from './objective.tsx'
 
 /** The contents of one initiative tab: its own details, then its objectives. */
@@ -43,14 +41,6 @@ export function InitiativeCard({
   // Owning the initiative makes everything under it relevant.
   const revealsAll = ownsInitiative(initiative, person)
   const objectives = visibleObjectives(initiative.objectives ?? [], person, revealsAll)
-
-  const [objectiveTab, setObjectiveTab] = useState(0)
-  // Clamp, as the initiative tabs do: a filter can hide whichever objective
-  // was open.
-  const activeObjective = objectives.some(({ index }) => index === objectiveTab)
-    ? objectiveTab
-    : (objectives[0]?.index ?? 0)
-  const openObjective = objectives.find(({ index }) => index === activeObjective)
 
   return (
     <article className="space-y-4">
@@ -90,13 +80,14 @@ export function InitiativeCard({
             {/* One name, held as a plain string in the file rather than a list,
                 but picked from the same pool as every other owner field. */}
             <PersonPicker
-              people={initiative.owner ? [initiative.owner] : []}
+              identities={initiative.owner ? [initiative.owner] : []}
               known={pools.people}
               multiple={false}
               label={`${id} owner`}
               highlight={person}
               onChange={(chosen) => editor.setInitiativeOwner(path, chosen[0] ?? null)}
               onEditPerson={editor.editPerson}
+              onAddPerson={editor.addPerson}
             />
           </Detail>
           <Detail label="timeframe">
@@ -120,26 +111,14 @@ export function InitiativeCard({
         </dl>
       </header>
 
-      <div className="space-y-3">
-        <ObjectiveTabs
-          objectives={objectives}
-          active={activeObjective}
-          person={person}
-          inherited={revealsAll}
-          onSelect={setObjectiveTab}
-          onAdd={() => {
-            editor.addObjective(path)
-            // Show what was just created, which lands at the end.
-            setObjectiveTab((initiative.objectives ?? []).length)
-          }}
-        />
-
-        {openObjective ? (
+      <div className="space-y-2">
+        {objectives.map(({ item: objective, index: objectiveIndex }) => (
           <ObjectiveCard
-            objective={openObjective.item}
+            key={objective.id ?? objectiveIndex}
+            objective={objective}
             initiativeId={id}
             initiativeIndex={index}
-            objectiveIndex={openObjective.index}
+            objectiveIndex={objectiveIndex}
             timeframe={initiative.timeframe}
             cadence={initiative.review_cadence}
             pools={pools}
@@ -147,13 +126,17 @@ export function InitiativeCard({
             inherited={revealsAll}
             editor={editor}
           />
-        ) : (
-          <p className="py-8 text-center text-sm text-ink-muted">
+        ))}
+
+        {objectives.length === 0 && (
+          <p className="py-6 text-center text-sm text-ink-muted">
             {person === EVERYONE
-              ? 'No objectives yet. Add one above.'
+              ? 'No objectives yet.'
               : 'No objectives here involve the filtered person.'}
           </p>
         )}
+
+        <AddButton label="Objective" onClick={() => editor.addObjective(path)} />
       </div>
     </article>
   )

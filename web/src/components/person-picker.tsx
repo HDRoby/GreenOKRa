@@ -3,7 +3,7 @@
 import { Check, Mail, Pencil, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 
-import { personKey, personLabel } from '@/lib/labels.ts'
+import { findPerson, personKey, personLabel } from '@/lib/labels.ts'
 import type { Person } from '@/lib/okr.ts'
 
 import { Dropdown, type DropdownOption } from './dropdown.tsx'
@@ -37,7 +37,7 @@ const CHIP_HIGHLIGHT = `${CHIP} border-accent bg-accent-dim/50 text-ink`
  * initiative's owner — so choosing replaces rather than appends.
  */
 export function PersonPicker({
-  people,
+  identities,
   known,
   multiple,
   clearable = false,
@@ -46,8 +46,11 @@ export function PersonPicker({
   highlight,
   onChange,
   onEditPerson,
+  onAddPerson,
 }: {
-  people: Person[]
+  /** Who is named here, as references into the roster. */
+  identities: string[]
+  /** The roster: everyone the file defines. */
   known: Person[]
   multiple: boolean
   clearable?: boolean
@@ -55,27 +58,34 @@ export function PersonPicker({
   placeholder?: string
   /** Identity of the person being filtered on, filled in solid. */
   highlight?: string | null
-  onChange: (people: Person[]) => void
-  /** Update this person wherever they appear. */
+  onChange: (identities: string[]) => void
+  /** Correct this person in the roster; references follow. */
   onEditPerson: (identity: string, person: Person) => void
+  /** Put somebody new in the roster, returning how to refer to them. */
+  onAddPerson: (person: Person) => string
 }) {
   const [mode, setMode] = useState<'idle' | 'pick' | 'new'>('idle')
   const [editing, setEditing] = useState<string | null>(null)
 
-  const held = new Set(people.map(personKey))
+  const held = new Set(identities)
   const available = known.filter((person) => !held.has(personKey(person)))
   const removable = multiple || clearable
 
-  const add = (person: Person) => {
+  const addKnown = (identity: string) => {
+    setMode('idle')
+    if (!identity || held.has(identity)) return
+    onChange(multiple ? [...identities, identity] : [identity])
+  }
+
+  const addNew = (person: Person) => {
     setMode('idle')
     if (!person.name?.trim() && !person.email?.trim()) return
-    if (held.has(personKey(person))) return
-    onChange(multiple ? [...people, person] : [person])
+    addKnown(onAddPerson(person))
   }
 
   const start = () => setMode(available.length > 0 ? 'pick' : 'new')
 
-  const beingEdited = people.find((person) => personKey(person) === editing)
+  const beingEdited = editing === null ? undefined : findPerson(known, editing)
   if (beingEdited) {
     return (
       <PersonForm
@@ -96,15 +106,17 @@ export function PersonPicker({
         person={{}}
         label={label}
         onCancel={() => setMode('idle')}
-        onSave={(person) => add(person)}
+        onSave={addNew}
       />
     )
   }
 
   return (
     <div className="flex flex-wrap items-center gap-1">
-      {people.map((person) => {
-        const identity = personKey(person)
+      {identities.map((identity) => {
+        // A reference the roster does not know is shown as itself, so a
+        // hand-broken file is legible rather than blank.
+        const person = findPerson(known, identity) ?? { name: identity }
         return (
           <span
             key={identity}
@@ -130,7 +142,7 @@ export function PersonPicker({
                 <button
                   type="button"
                   onClick={() =>
-                    onChange(people.filter((other) => personKey(other) !== identity))
+                    onChange(identities.filter((other) => other !== identity))
                   }
                   aria-label={`Remove ${personLabel(person)} from ${label}`}
                   className="hover:!opacity-100"
@@ -143,7 +155,7 @@ export function PersonPicker({
         )
       })}
 
-      {mode === 'idle' && (people.length === 0 || multiple) && (
+      {mode === 'idle' && (identities.length === 0 || multiple) && (
         <button
           type="button"
           onClick={start}
@@ -166,8 +178,7 @@ export function PersonPicker({
               setMode('new')
               return
             }
-            const person = available.find((candidate) => personKey(candidate) === chosen)
-            if (person) add(person)
+            addKnown(chosen)
           }}
           onClose={() => setMode((current) => (current === 'pick' ? 'idle' : current))}
           label={`Choose ${label}`}
@@ -177,7 +188,7 @@ export function PersonPicker({
         />
       )}
 
-      {people.length === 0 && mode === 'idle' && (
+      {identities.length === 0 && mode === 'idle' && (
         <span className="text-xs italic text-ink-faint">{placeholder}</span>
       )}
     </div>

@@ -112,11 +112,10 @@ You keep the files; git is the history.
 - **Add** initiatives, objectives, key results and links
 - **Save** back to the file you opened, with `⌘S`
 
-Owners appear as coloured chips, one colour per person, so the same name is
-recognisable at a glance across the file. Each carries a name and, behind the
-pencil, an email — the address being the identity that survives a name being
-spelled two ways. Correcting one updates that person everywhere in the file,
-not just where you happened to be looking. Priority and complexity share their
+People are defined once, in a `people` list at the top of the file, and the OKRs
+refer to them by address — or by name, for the ones who have no address. So
+correcting somebody is a single edit, and nobody is written out twenty times.
+Owner fields show them as chips; the pencil opens their name and email. Priority and complexity share their
 values (High, Medium, Low), so each carries an icon — a flag for priority,
 layers for complexity — to tell them apart without reading.
 

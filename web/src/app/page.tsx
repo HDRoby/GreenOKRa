@@ -15,6 +15,7 @@ import {
   addInitiative,
   addKeyResult,
   addLink,
+  addPerson,
   addProgressNote,
   addObjective,
   applyStatusRules,
@@ -139,6 +140,15 @@ export default function Page() {
         commit((doc) => setInitiativeOwner(doc, path, person)),
       editPerson: (identity, person) =>
         commit((doc) => updatePerson(doc, identity, person)),
+      addPerson: (person) => {
+        // The roster has to grow before the reference is written, and the
+        // caller needs the identity back to write it.
+        const doc = docRef.current
+        if (!doc) return ''
+        const identity = addPerson(doc, person)
+        commit(() => {})
+        return identity
+      },
 
       addNote: (path, date, note) =>
         commit((doc) => addProgressNote(doc, path, date, note)),

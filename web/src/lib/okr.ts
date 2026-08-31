@@ -93,7 +93,7 @@ const SI_ID = /^[A-Z]{2,5}$/
 const OBJECTIVE_ID = /^O[0-9]+$/
 const KR_ID = /^KR[0-9]+$/
 
-const FILE_KEYS = ['version', 'strategic_initiatives'] as const
+const FILE_KEYS = ['version', 'people', 'strategic_initiatives'] as const
 
 /**
  * The allowed fields at each level, in the order SPEC.md documents them. An
@@ -164,11 +164,41 @@ export interface Person {
   email?: string
 }
 
+/**
+ * How a person is referred to from the OKRs.
+ *
+ * The address where there is one, since that is what survives a name being
+ * spelled differently; the name otherwise. Lower-cased, so a reference written
+ * with different capitalisation still finds them.
+ */
+export function personKey(person: Person | undefined): string {
+  return (person?.email?.trim() || person?.name?.trim() || '').toLowerCase()
+}
+
+/** How a person is shown. */
+export function personLabel(person: Person | undefined): string {
+  return person?.name?.trim() || person?.email?.trim() || '(unnamed)'
+}
+
+/** Find somebody in the roster by the identity an OKR refers to them by. */
+export function findPerson(
+  roster: Person[] | undefined,
+  identity: string | undefined,
+): Person | undefined {
+  const key = identity?.trim().toLowerCase()
+  if (!key) return undefined
+  return (roster ?? []).find((person) => personKey(person) === key)
+}
+
+/**
+ * Who is named on a key result, as references into the file's `people` roster
+ * rather than as people. One definition, many mentions.
+ */
 export interface Owners {
-  accountable?: Person[]
-  responsible?: Person[]
-  consult?: Person[]
-  inform?: Person[]
+  accountable?: string[]
+  responsible?: string[]
+  consult?: string[]
+  inform?: string[]
 }
 
 export interface KeyResult {
@@ -187,7 +217,7 @@ export interface Objective {
   title?: string
   description?: string
   theme?: string
-  owners?: Person[]
+  owners?: string[]
   status?: string
   links?: Link[]
   key_results?: KeyResult[]
@@ -196,7 +226,7 @@ export interface Objective {
 export interface Initiative {
   id?: string
   title?: string
-  owner?: Person
+  owner?: string
   timeframe?: string
   review_cadence?: string
   status?: string
@@ -206,6 +236,8 @@ export interface Initiative {
 
 export interface OkrFile {
   version?: number
+  /** Everyone the OKRs refer to, defined once. */
+  people?: Person[]
   strategic_initiatives?: Initiative[]
 }
 
@@ -498,93 +530,158 @@ function identifier(
 /** Permissive on purpose: this checks for an obvious mistake, not RFC 5322. */
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/** A person as a one-line flow mapping, which is how they are written. */
-function personNode(name: string): YAMLMap {
+/** A roster entry as a one-line flow mapping, which is how they are written. */
+function personNode(person: Person): YAMLMap {
   const map = new YAMLMap()
   map.flow = true
-  map.add(new Pair(new Scalar('name'), new Scalar(name)))
+  map.add(new Pair(new Scalar('name'), new Scalar(person.name?.trim() ?? '')))
+  const email = person.email?.trim()
+  if (email) map.add(new Pair(new Scalar('email'), new Scalar(email)))
   return map
 }
 
-/** Check one person entry, upgrading a bare name into the mapping shape. */
-function personEntry(node: unknown, path: string, report: Report): YAMLMap | null {
+/** Check one roster entry. */
+function personEntry(node: unknown, path: string, report: Report): Person | null {
   if (!isMap(node)) {
     report.error(`${path}: expected a name and optional email, found ${describe(node)}`)
     return null
   }
   unknownKeys(node, PERSON_KEYS, path, report)
-  textField(node, 'name', path, report)
+  const name = textField(node, 'name', path, report)
   const email = textField(node, 'email', path, report, false)
   if (email !== null && !EMAIL.test(email)) {
     report.error(`${path}.email: '${email}' is not an email address`)
   }
-  return node
+  if (name === null && email === null) return null
+  return { ...(name ? { name } : {}), ...(email ? { email } : {}) }
+}
+
+/** Put `people` where SPEC.md documents it: after `version`, before the OKRs. */
+function insertRoster(root: YAMLMap, seq: YAMLSeq): void {
+  const at = root.items.findIndex(
+    (pair) => (isScalar(pair.key) ? String(pair.key.value) : '') === 'strategic_initiatives',
+  )
+  const pair = new Pair(new Scalar('people'), seq)
+  if (at === -1) root.items.push(pair)
+  else root.items.splice(at, 0, pair)
 }
 
 /**
- * A list of people, accepting a bare name in place of the mapping.
+ * Collect every person into the roster, and leave a reference behind.
  *
- * `accountable: [roberto]` becomes `accountable: [{ name: roberto }]`, reported
- * as a repair. Every file written before people had addresses therefore opens
- * and upgrades itself, and typing a name by hand still works.
+ * Runs before anything else looks at the document, so by the time the OKRs are
+ * checked every owner field holds a plain identity that is known to resolve.
+ * Three shapes arrive here and all three end up the same way:
+ *
+ * - a mapping written inline, from a file predating the roster
+ * - a bare name, from a file predating people having addresses at all
+ * - a reference, which is already what we want and is only case-normalised
+ *
+ * Nobody is ever removed. An entry left behind by a name typed in error is
+ * visible in `people` and can be deleted there; deleting it automatically
+ * would risk discarding somebody deliberately listed before being assigned.
  */
-function personList(
-  map: YAMLMap,
-  key: string,
-  path: string,
-  report: Report,
-  required = true,
-): Person[] {
-  if (absent(map, key, path, report, required)) return []
-  let node = map.get(key, true)
+function factorPeople(doc: Document, report: Report): void {
+  const root = doc.contents
+  if (!isMap(root)) return
 
-  // A single bare name where a list belongs.
-  if (isScalar(node) && typeof node.value === 'string') {
-    const solo = node.value.trim()
-    const wrapped = new YAMLSeq()
-    wrapped.add(personNode(solo))
-    map.set(key, wrapped)
-    report.fix(`${path}.${key}: wrapped '${solo}' in a list`)
-    node = map.get(key, true)
+  const existing = root.get('people', true)
+  if (existing !== undefined && existing !== null && !isSeq(existing)) {
+    report.error('file.people: expected a list of people')
+    return
+  }
+  let seq: YAMLSeq | null = isSeq(existing) ? existing : null
+
+  const byKey = new Map<string, Person>()
+  if (seq) {
+    seq.items.forEach((item, index) => {
+      const person = personEntry(item, `people[${index}]`, report)
+      if (!person) return
+      const key = personKey(person)
+      if (byKey.has(key)) {
+        report.error(`people[${index}]: '${key}' is in the roster more than once`)
+        return
+      }
+      byKey.set(key, person)
+    })
   }
 
-  if (!isSeq(node)) {
-    report.error(`${path}.${key}: expected a list of people`)
-    return []
-  }
-
-  const people: Person[] = []
-  node.items.forEach((item, index) => {
-    const entryPath = `${path}.${key}[${index}]`
-    if (isScalar(item) && typeof item.value === 'string') {
-      const name = item.value.trim()
-      node.items[index] = personNode(name)
-      report.fix(`${entryPath}: '${name}' given the name/email shape`)
+  /** Returns the identity, and whether the roster grew. */
+  const ensure = (person: Person): { key: string; added: boolean } => {
+    const key = personKey(person)
+    if (!key) return { key: '', added: false }
+    if (byKey.has(key)) return { key, added: false }
+    if (!seq) {
+      seq = new YAMLSeq()
+      insertRoster(root, seq)
     }
-    const checked = personEntry(node.items[index], entryPath, report)
-    if (checked) people.push(checked.toJSON() as Person)
-  })
-  return people
-}
-
-/** One person, where the field holds a single one rather than a list. */
-function personValue(
-  map: YAMLMap,
-  key: string,
-  path: string,
-  report: Report,
-  required = true,
-): Person | null {
-  if (absent(map, key, path, report, required)) return null
-  const node = map.get(key, true)
-
-  if (isScalar(node) && typeof node.value === 'string') {
-    const name = node.value.trim()
-    map.set(key, personNode(name))
-    report.fix(`${path}.${key}: '${name}' given the name/email shape`)
+    seq.add(personNode(person))
+    byKey.set(key, person)
+    return { key, added: true }
   }
-  const checked = personEntry(map.get(key, true), `${path}.${key}`, report)
-  return checked ? (checked.toJSON() as Person) : null
+
+  const factorOne = (node: unknown, where: string): unknown => {
+    // One message per occurrence: what happened to it, not every step.
+    if (isMap(node)) {
+      const person = personEntry(node, where, report)
+      if (!person) return node
+      const { key } = ensure(person)
+      report.fix(`${where}: '${personLabel(person)}' moved into people`)
+      return new Scalar(key)
+    }
+    if (isScalar(node) && typeof node.value === 'string') {
+      const raw = node.value.trim()
+      if (!raw) return node
+      const known = byKey.get(raw.toLowerCase())
+      if (known) {
+        node.value = personKey(known)
+        return node
+      }
+      const { key } = ensure({ name: raw })
+      node.value = key
+      report.fix(`${where}: '${raw}' added to people`)
+      return node
+    }
+    return node
+  }
+
+  const factor = (holder: unknown, key: string, where: string) => {
+    if (!isMap(holder)) return
+    const node = holder.get(key, true)
+    if (node === undefined || node === null) return
+    if (isSeq(node)) {
+      node.items.forEach((item, index) => {
+        node.items[index] = factorOne(item, `${where}.${key}[${index}]`)
+      })
+      return
+    }
+    const replaced = factorOne(node, `${where}.${key}`)
+    if (replaced !== node) holder.set(key, replaced)
+  }
+
+  const initiatives = root.get('strategic_initiatives', true)
+  if (!isSeq(initiatives)) return
+  initiatives.items.forEach((initiative, i) => {
+    if (!isMap(initiative)) return
+    const at = String(initiative.get('id') ?? `strategic_initiatives[${i}]`)
+    factor(initiative, 'owner', at)
+    const objectives = initiative.get('objectives', true)
+    if (!isSeq(objectives)) return
+    objectives.items.forEach((objective, j) => {
+      if (!isMap(objective)) return
+      const here = `${at}.${objective.get('id') ?? j}`
+      factor(objective, 'owners', here)
+      const keyResults = objective.get('key_results', true)
+      if (!isSeq(keyResults)) return
+      keyResults.items.forEach((keyResult, k) => {
+        if (!isMap(keyResult)) return
+        const owners = keyResult.get('owners', true)
+        const kr = `${here}.${keyResult.get('id') ?? k}`
+        if (isMap(owners)) renameLegacyRoles(owners, `${kr}.owners`, report)
+        for (const role of RACI_ROLES) factor(owners, role, `${kr}.owners`)
+      })
+    })
+  })
 }
 
 function nameList(
@@ -658,6 +755,7 @@ function materialise(doc: Document, node: unknown): void {
 export function validate(doc: Document): Report {
   const report = new Report()
   materialise(doc, doc.contents)
+  factorPeople(doc, report)
   const root = doc.contents
   if (!isMap(root)) {
     report.error('file: expected a mapping at the top level')
@@ -716,7 +814,7 @@ function validateInitiative(
   const prefix = initiativeId ?? path
 
   textField(initiative, 'title', prefix, report)
-  personValue(initiative, 'owner', prefix, report)
+  textField(initiative, 'owner', prefix, report)
   labelField(initiative, 'timeframe', prefix, report)
   enumField(initiative, 'review_cadence', CADENCES, prefix, report, false)
   textField(initiative, 'description', prefix, report, false)
@@ -771,7 +869,7 @@ function validateObjective(
   textField(objective, 'theme', prefix, report, false)
   enumField(objective, 'status', STATUSES, prefix, report)
   if (objective.has('owners')) {
-    personList(objective, 'owners', prefix, report, false)
+    nameList(objective, 'owners', prefix, report, false)
   }
   validateLinks(objective, prefix, report)
 
@@ -878,11 +976,11 @@ function validateOwners(keyResult: YAMLMap, path: string, report: Report): void 
   renameLegacyRoles(owners, `${path}.owners`, report)
   unknownKeys(owners, RACI_ROLES, `${path}.owners`, report)
 
-  const named = new Map<string, Person[]>()
+  const named = new Map<string, string[]>()
   for (const role of RACI_ROLES) {
     if (!owners.has(role)) continue
     if (absent(owners, role, `${path}.owners`, report, false)) continue
-    named.set(role, personList(owners, role, `${path}.owners`, report, false))
+    named.set(role, nameList(owners, role, `${path}.owners`, report, false))
   }
 
   const total = [...named.values()].reduce((sum, list) => sum + list.length, 0)

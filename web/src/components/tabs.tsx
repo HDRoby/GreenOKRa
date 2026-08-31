@@ -7,17 +7,13 @@ import {
   type Indexed,
   type PersonFilter,
   ownsInitiative,
-  ownsObjective,
-  visibleKeyResults,
   visibleObjectives,
 } from '@/lib/filter.ts'
 import {
   type Initiative,
-  type Objective,
   decidedStatus,
   formatProgress,
   initiativeProgress,
-  objectiveProgress,
 } from '@/lib/okr.ts'
 
 import { textToneFor } from './fields.tsx'
@@ -169,71 +165,6 @@ export function InitiativeTabs({
           }}
         />
       )}
-    </div>
-  )
-}
-
-/**
- * One tab per objective, inside the selected initiative.
- *
- * Same reasoning a level down: an objective carries a list of key results, and
- * stacking several of those makes a page nobody scrolls to the bottom of.
- */
-export function ObjectiveTabs({
-  objectives,
-  active,
-  person,
-  inherited,
-  onSelect,
-  onAdd,
-}: {
-  objectives: Indexed<Objective>[]
-  active: number
-  person: PersonFilter
-  /** True when the initiative itself is the filtered person's. */
-  inherited: boolean
-  onSelect: (index: number) => void
-  onAdd: () => void
-}) {
-  return (
-    <div
-      role="tablist"
-      aria-label="Objectives"
-      className="flex items-stretch gap-1 overflow-x-auto border-b border-line/70"
-    >
-      {objectives.map(({ item: objective, index }) => {
-        const keyResults = visibleKeyResults(
-          objective.key_results ?? [],
-          person,
-          inherited || ownsObjective(objective, person),
-        ).length
-
-        return (
-          <TabButton
-            key={objective.id ?? index}
-            label={objective.title || 'Untitled'}
-            count={keyResults}
-            countLabel={plural(keyResults, 'key result')}
-            progress={objectiveProgress(objective)}
-            status={objective.status}
-            selected={index === active}
-            title={`${objective.id ?? '?'} — ${plural(keyResults, 'key result')}`}
-            weight="secondary"
-            onClick={() => onSelect(index)}
-          />
-        )
-      })}
-
-      <button
-        type="button"
-        onClick={onAdd}
-        aria-label="New objective"
-        title="New objective"
-        className="ml-1 shrink-0 self-center rounded-md border border-line p-1
-          text-ink-faint hover:border-accent-dim hover:text-accent"
-      >
-        <Plus size={13} />
-      </button>
     </div>
   )
 }

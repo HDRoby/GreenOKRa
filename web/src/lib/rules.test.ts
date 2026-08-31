@@ -35,17 +35,24 @@ import {
 } from './okr.ts'
 
 const FILE = `version: 1
+people:
+  - {name: roberto}
+  - {name: elena}
+  - {name: maria}
+  - {name: luca}
+  - {name: marco}
+  - {name: cto}
 strategic_initiatives:
   - id: TEK
     title: Technology
-    owner: {name: roberto}
+    owner: roberto
     timeframe: "2026"
     status: Not Started
     objectives:
       - id: O1
         title: First
         owners:
-          - {name: elena}
+          - elena
         status: Not Started
         key_results:
           - id: KR1
@@ -53,10 +60,10 @@ strategic_initiatives:
             target_date: Q3
             owners:
               accountable:
-                - {name: roberto}
+                - roberto
               responsible:
-                - {name: maria}
-                - {name: luca}
+                - maria
+                - luca
             status: Not Started
             priority: High
             complexity: Medium
@@ -69,9 +76,9 @@ strategic_initiatives:
             target_date: "2026-09-30"
             owners:
               accountable:
-                - {name: marco}
+                - marco
               inform:
-                - {name: cto}
+                - cto
             status: Not Started
             priority: Low
             complexity: Low
@@ -84,9 +91,14 @@ const objectiveStatus = (index: number) => [
   index,
 ]
 
-/** The display names in a document, which is what the assertions care about. */
-const names = (doc: ReturnType<typeof parse>) =>
-  collectPeople(toData(doc)).map(personLabel)
+/**
+ * The display names a document defines. Validating first, since that is what
+ * collects inline people into the roster the pool reads.
+ */
+const names = (doc: ReturnType<typeof parse>) => {
+  validate(doc)
+  return collectPeople(toData(doc)).map(personLabel)
+}
 
 const keyResultStatus = (objective: number, keyResult: number) => [
   ...objectiveStatus(objective),
@@ -177,7 +189,7 @@ describe('timeframes', () => {
 // --------------------------------------------------------------------------
 describe('people', () => {
   test('collects every name in the file, deduplicated and sorted', () => {
-    expect(collectPeople(toData(parse(FILE))).map(personLabel)).toEqual([
+    expect(names(parse(FILE))).toEqual([
       'cto',
       'elena',
       'luca',
@@ -198,59 +210,49 @@ describe('people', () => {
   })
 
   /**
-   * The list is derived from the document, never kept alongside it. So a name
-   * added in one field is offered by every other owner field straight away, and
-   * one that is removed again stops being offered — no separate pool to go
-   * stale, and nothing to clean up.
+   * The pool is the roster, and a reference to somebody not in it puts them
+   * there. So naming a new person in one field makes them available in every
+   * other, without the editor having to touch two places.
    */
-  test('a name added in one field becomes available everywhere', () => {
+  test('a name used in one field becomes available everywhere', () => {
     const doc = parse(FILE)
     expect(names(doc)).not.toContain('sofia')
 
-    setOwners(doc, keyResultStatus(0, 0), 'consult', [{ name: 'sofia' }])
+    setOwners(doc, keyResultStatus(0, 0), 'consult', ['sofia'])
     expect(names(doc)).toContain('sofia')
   })
 
-  test('a name removed again stops being offered', () => {
+  /**
+   * A change from when people were written inline: the roster is a definition,
+   * not a tally of mentions. Somebody taken off the only key result they were
+   * on stays defined, so they can be put somewhere else without being typed
+   * again — and a name entered by mistake is deleted from `people`, where it is
+   * visible, rather than by hunting down its last use.
+   */
+  test('somebody stays defined after their last mention goes', () => {
     const doc = parse(FILE)
-    setOwners(doc, keyResultStatus(0, 0), 'consult', [{ name: 'sofia' }])
+    setOwners(doc, keyResultStatus(0, 0), 'consult', ['sofia'])
+    // The editor validates after every change, which is what puts a newly
+    // named person into the roster.
+    validate(doc)
+
     setOwners(doc, keyResultStatus(0, 0), 'consult', [])
 
-    expect(names(doc)).not.toContain('sofia')
-  })
-
-  test('a name still used elsewhere survives being removed from one field', () => {
-    const doc = parse(FILE)
-    setOwners(doc, keyResultStatus(0, 0), 'consult', [{ name: 'sofia' }])
-    setOwners(doc, keyResultStatus(1, 0), 'inform', [
-      { name: 'cto' },
-      { name: 'sofia' },
-    ])
-
-    setOwners(doc, keyResultStatus(0, 0), 'consult', [])
-
     expect(names(doc)).toContain('sofia')
   })
 
-  test('the initiative owner draws on the same pool', () => {
+  test('the initiative owner draws on the same roster', () => {
     const doc = parse(FILE)
-    setInitiativeOwner(doc, ['strategic_initiatives', 0], { name: 'sofia' })
+    setInitiativeOwner(doc, ['strategic_initiatives', 0], 'sofia')
     expect(names(doc)).toContain('sofia')
   })
 
-  test('the same address written with two names counts once', () => {
+  test('naming the same person twice defines them once', () => {
     const doc = parse(FILE)
-    setOwners(doc, keyResultStatus(0, 0), 'consult', [
-      { name: 'Sofia Ricci', email: 'sofia@example.com' },
-    ])
-    setOwners(doc, keyResultStatus(1, 0), 'inform', [
-      { name: 'sofia.ricci', email: 'sofia@example.com' },
-    ])
+    setOwners(doc, keyResultStatus(0, 0), 'consult', ['sofia'])
+    setOwners(doc, keyResultStatus(1, 0), 'inform', ['cto', 'sofia'])
 
-    const matching = collectPeople(toData(doc)).filter(
-      (person) => person.email === 'sofia@example.com',
-    )
-    expect(matching).toHaveLength(1)
+    expect(names(doc).filter((name) => name === 'sofia')).toHaveLength(1)
   })
 })
 

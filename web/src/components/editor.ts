@@ -15,11 +15,13 @@ export interface Editor {
   setObjective(path: Path, key: string, value: string, required?: boolean): void
   setKeyResult(path: Path, key: string, value: string, required?: boolean): void
 
-  setOwners(keyResult: Path, role: string, people: Person[]): void
-  setObjectiveOwners(objective: Path, people: Person[]): void
-  setInitiativeOwner(initiative: Path, person: Person | null): void
-  /** Correct one person wherever they appear; their address is their identity. */
+  setOwners(keyResult: Path, role: string, identities: string[]): void
+  setObjectiveOwners(objective: Path, identities: string[]): void
+  setInitiativeOwner(initiative: Path, identity: string | null): void
+  /** Correct somebody in the roster; every reference follows. */
   editPerson(identity: string, person: Person): void
+  /** Put somebody new in the roster, returning how to refer to them. */
+  addPerson(person: Person): string
 
   addNote(keyResult: Path, date: string, note: string): void
   setNote(keyResult: Path, index: number, key: 'date' | 'note', value: string): void

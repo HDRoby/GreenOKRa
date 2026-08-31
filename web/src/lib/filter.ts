@@ -10,8 +10,15 @@
  * name is repeated on each one.
  */
 
-import { personKey, personLabel } from './labels.ts'
-import type { Initiative, KeyResult, Objective, OkrFile, Person } from './okr.ts'
+import {
+  type Initiative,
+  type KeyResult,
+  type Objective,
+  type OkrFile,
+  type Person,
+  personKey,
+  personLabel,
+} from './okr.ts'
 
 /** No filter. The default. */
 export const EVERYONE = null
@@ -34,20 +41,18 @@ export type PersonFilter = string | null
 const OWNING_ROLES = ['accountable', 'responsible'] as const
 
 export function keyResultInvolves(keyResult: KeyResult, person: string): boolean {
-  return OWNING_ROLES.some((role) =>
-    (keyResult.owners?.[role] ?? []).some((held) => personKey(held) === person),
-  )
+  return OWNING_ROLES.some((role) => (keyResult.owners?.[role] ?? []).includes(person))
 }
 
 export function objectiveInvolves(objective: Objective, person: string): boolean {
-  if ((objective.owners ?? []).some((held) => personKey(held) === person)) return true
+  if ((objective.owners ?? []).includes(person)) return true
   return (objective.key_results ?? []).some((keyResult) =>
     keyResultInvolves(keyResult, person),
   )
 }
 
 export function initiativeInvolves(initiative: Initiative, person: string): boolean {
-  if (personKey(initiative.owner) === person) return true
+  if (initiative.owner === person) return true
   return (initiative.objectives ?? []).some((objective) =>
     objectiveInvolves(objective, person),
   )
@@ -61,26 +66,28 @@ export function initiativeInvolves(initiative: Initiative, person: string): bool
  * informed could never match anything — offering them would be a dead choice.
  */
 export function filterablePeople(file: OkrFile | null): Person[] {
-  const found = new Map<string, Person>()
-  const add = (person: Person | undefined) => {
-    const key = personKey(person)
-    if (key && person && !found.has(key)) found.set(key, person)
+  const owning = new Set<string>()
+  const add = (identity: string | undefined) => {
+    if (identity) owning.add(identity)
   }
 
   for (const initiative of file?.strategic_initiatives ?? []) {
     add(initiative.owner)
     for (const objective of initiative.objectives ?? []) {
-      for (const person of objective.owners ?? []) add(person)
+      for (const identity of objective.owners ?? []) add(identity)
       for (const keyResult of objective.key_results ?? []) {
         for (const role of OWNING_ROLES) {
-          for (const person of keyResult.owners?.[role] ?? []) add(person)
+          for (const identity of keyResult.owners?.[role] ?? []) add(identity)
         }
       }
     }
   }
-  return [...found.values()].sort((a, b) =>
-    personLabel(a).localeCompare(personLabel(b)),
-  )
+
+  // The roster may hold somebody nobody has been given yet, or somebody left
+  // only in a consulted role. Neither could match, so neither is offered.
+  return (file?.people ?? [])
+    .filter((person) => owning.has(personKey(person)))
+    .sort((a, b) => personLabel(a).localeCompare(personLabel(b)))
 }
 
 export interface Indexed<T> {
@@ -154,13 +161,10 @@ export function ownsInitiative(
   initiative: Initiative,
   person: PersonFilter,
 ): boolean {
-  return person !== EVERYONE && personKey(initiative.owner) === person
+  return person !== EVERYONE && initiative.owner === person
 }
 
 /** True when this person is named on the objective itself. */
 export function ownsObjective(objective: Objective, person: PersonFilter): boolean {
-  return (
-    person !== EVERYONE &&
-    (objective.owners ?? []).some((held) => personKey(held) === person)
-  )
+  return person !== EVERYONE && (objective.owners ?? []).includes(person)
 }

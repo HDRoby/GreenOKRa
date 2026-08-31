@@ -1,18 +1,20 @@
 /**
- * The short labels a file reuses — people and themes — and a colour for each.
+ * The values a file reuses — people and themes — and a colour for themes.
  *
- * These fields offer the values already in use rather than a free text box, so
- * `roberto.basile` does not quietly become `roberto basile` in one key result
- * and `r.basile` in the next, and so a theme spelled two ways does not silently
- * split one group of objectives into two.
+ * The pickers offer what is already in use rather than a free text box, so a
+ * theme spelled two ways does not silently split one group of objectives into
+ * two, and a person is chosen rather than retyped.
  *
- * Both lists are derived from the document on every read, never stored beside
- * it. A value exists exactly as long as something references it: enter one and
- * every field offers it immediately; remove the last use and it stops being
- * offered, with nothing to clean up.
+ * People come from the file's roster, where each is defined once. Themes are
+ * still derived by scanning, since they are only ever a word on an objective
+ * and there is nothing to define.
  */
 
-import { type OkrFile, type Person, RACI_ROLES } from './okr.ts'
+import { type OkrFile, type Person, personLabel } from './okr.ts'
+
+// Identity belongs to the format — it is what a reference means — so it is
+// defined there and re-exported here for the UI's convenience.
+export { findPerson, personKey, personLabel } from './okr.ts'
 
 /** The values offered by the pickers, for one loaded file. */
 export interface Pools {
@@ -21,48 +23,13 @@ export interface Pools {
 }
 
 /**
- * How a person is identified. The address where there is one, since that is
- * what survives a name being spelled differently; the name otherwise.
- */
-export function personKey(person: Person | undefined): string {
-  return (person?.email?.trim() || person?.name?.trim() || '').toLowerCase()
-}
-
-/** How a person is shown. */
-export function personLabel(person: Person | undefined): string {
-  return person?.name?.trim() || person?.email?.trim() || '(unnamed)'
-}
-
-function sorted(values: Set<string>): string[] {
-  return [...values].sort((a, b) => a.localeCompare(b))
-}
-
-/**
- * Everyone named in the file: initiative owners, objective owners, RACI.
+ * Everyone the file defines.
  *
- * Deduplicated by identity, so the same address written with two spellings of
- * a name collapses to one entry — the first spelling met, which is arbitrary
- * but stable within a read.
+ * Simply the roster: people are defined once at the top and referenced from
+ * the OKRs, so there is nothing to scan for and nothing to deduplicate.
  */
 export function collectPeople(file: OkrFile | null): Person[] {
-  const found = new Map<string, Person>()
-  const add = (person: Person | undefined) => {
-    const key = personKey(person)
-    if (key && person && !found.has(key)) found.set(key, person)
-  }
-
-  for (const initiative of file?.strategic_initiatives ?? []) {
-    add(initiative.owner)
-    for (const objective of initiative.objectives ?? []) {
-      for (const person of objective.owners ?? []) add(person)
-      for (const keyResult of objective.key_results ?? []) {
-        for (const role of RACI_ROLES) {
-          for (const person of keyResult.owners?.[role] ?? []) add(person)
-        }
-      }
-    }
-  }
-  return [...found.values()].sort((a, b) =>
+  return [...(file?.people ?? [])].sort((a, b) =>
     personLabel(a).localeCompare(personLabel(b)),
   )
 }
@@ -76,7 +43,7 @@ export function collectThemes(file: OkrFile | null): string[] {
       if (theme) themes.add(theme)
     }
   }
-  return sorted(themes)
+  return [...themes].sort((a, b) => a.localeCompare(b))
 }
 
 export function collectPools(file: OkrFile | null): Pools {
@@ -104,9 +71,9 @@ export interface Tint {
 /**
  * A light tint for a chip: enough colour to tell values apart, no more.
  *
- * `solid` fills the chip with the colour its border normally uses, which is how
- * the person being filtered on is picked out of a page of other names. Text
- * flips dark, since the fill is light.
+ * Used for themes, where a handful of values group objectives across
+ * initiatives and the colour makes that grouping visible. People are
+ * deliberately neutral: a hue hashed from a name teaches the reader nothing.
  */
 export function labelTint(label: string, solid = false): Tint {
   const hue = hueOf(label)

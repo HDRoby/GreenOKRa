@@ -14,24 +14,30 @@ import {
   withIndices,
 } from './filter.ts'
 import { collectPeople, personKey, personLabel } from './labels.ts'
-import { type Initiative, type OkrFile, parse, toData } from './okr.ts'
+import { type Initiative, type OkrFile, parse, toData, validate } from './okr.ts'
 
 /**
  * Three initiatives. maria appears only deep inside PRO; marco owns TEK
  * outright but is named on nothing below it.
  */
 const FILE = `version: 1
+people:
+  - {name: roberto}
+  - {name: elena}
+  - {name: luca}
+  - {name: maria}
+  - {name: marco}
 strategic_initiatives:
   - id: PEP
     title: People
-    owner: {name: roberto}
+    owner: roberto
     timeframe: "2026"
     status: In Progress
     objectives:
       - id: O1
         title: Owned by elena
         owners:
-          - {name: elena}
+          - elena
         status: In Progress
         key_results:
           - id: KR1
@@ -39,7 +45,7 @@ strategic_initiatives:
             target_date: Q1
             owners:
               accountable:
-                - {name: roberto}
+                - roberto
             status: In Progress
             priority: High
             complexity: Low
@@ -48,13 +54,13 @@ strategic_initiatives:
             target_date: Q2
             owners:
               accountable:
-                - {name: luca}
+                - luca
             status: Not Started
             priority: Low
             complexity: Low
   - id: PRO
     title: Process
-    owner: {name: roberto}
+    owner: roberto
     timeframe: "2026"
     status: In Progress
     objectives:
@@ -67,7 +73,7 @@ strategic_initiatives:
             target_date: Q3
             owners:
               accountable:
-                - {name: luca}
+                - luca
             status: Not Started
             priority: Low
             complexity: Low
@@ -80,15 +86,15 @@ strategic_initiatives:
             target_date: Q4
             owners:
               accountable:
-                - {name: luca}
+                - luca
               consult:
-                - {name: maria}
+                - maria
             status: Not Started
             priority: Low
             complexity: Low
   - id: TEK
     title: Technology
-    owner: {name: marco}
+    owner: marco
     timeframe: "2026"
     status: Not Started
     objectives:
@@ -101,13 +107,20 @@ strategic_initiatives:
             target_date: Q1
             owners:
               accountable:
-                - {name: luca}
+                - luca
             status: Not Started
             priority: Low
             complexity: Low
 `
 
-const data: OkrFile = toData(parse(FILE))
+/** Parsed and validated, so the fixture's inline people factor into a roster. */
+function load(): OkrFile {
+  const doc = parse(FILE)
+  validate(doc)
+  return toData(doc)
+}
+
+const data: OkrFile = load()
 const initiatives = data.strategic_initiatives ?? []
 const find = (id: string): Initiative =>
   initiatives.find((initiative) => initiative.id === id) as Initiative
@@ -129,12 +142,8 @@ describe('involvement', () => {
     const keyResult = find('PRO').objectives?.[1]?.key_results?.[0]
     // maria is consulted on this one, and nothing else.
     expect(keyResultInvolves(keyResult ?? {}, 'maria')).toBe(false)
-    expect(keyResultInvolves({ owners: { inform: [{ name: 'cto' }] } }, 'cto')).toBe(
-      false,
-    )
-    expect(
-      keyResultInvolves({ owners: { responsible: [{ name: 'cto' }] } }, 'cto'),
-    ).toBe(true)
+    expect(keyResultInvolves({ owners: { inform: ['cto'] } }, 'cto')).toBe(false)
+    expect(keyResultInvolves({ owners: { responsible: ['cto'] } }, 'cto')).toBe(true)
   })
 
   test('an objective counts its own owners and its key results', () => {

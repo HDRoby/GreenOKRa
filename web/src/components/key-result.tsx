@@ -171,13 +171,14 @@ export function KeyResultRow({
                   {role}
                 </span>
                 <PersonPicker
-                  people={keyResult.owners?.[role] ?? []}
+                  identities={keyResult.owners?.[role] ?? []}
                   known={people}
                   multiple={!SINGLE_ROLES.has(role)}
                   label={`${reference} ${role}`}
                   highlight={person}
                   onChange={(chosen) => editor.setOwners(path, role, chosen)}
                   onEditPerson={editor.editPerson}
+              onAddPerson={editor.addPerson}
                 />
               </div>
             ))}
