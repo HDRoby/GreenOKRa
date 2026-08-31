@@ -8,6 +8,7 @@ import type { Document } from 'yaml'
 import { InitiativeCard } from '@/components/initiative.tsx'
 import type { Editor } from '@/components/editor.ts'
 import { ReportPanel } from '@/components/report-panel.tsx'
+import { InitiativeTabs } from '@/components/tabs.tsx'
 import {
   type Path,
   addInitiative,
@@ -15,6 +16,7 @@ import {
   addLink,
   addProgressNote,
   addObjective,
+  applyStatusRules,
   removeLink,
   setField,
   setNumberField,
@@ -22,6 +24,7 @@ import {
   setOptionalField,
   setOwners,
 } from '@/lib/edit.ts'
+import { collectPools } from '@/lib/labels.ts'
 import {
   type OpenedFile,
   canSaveInPlace,
@@ -52,6 +55,15 @@ export default function Page() {
   const [report, setReport] = useState<Report | null>(null)
   const [dirty, setDirty] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [tab, setTab] = useState(0)
+  // Resolved after mount, never during render: the server has no `window`, so
+  // asking it there and in the browser gives different answers and the
+  // hydrated markup no longer matches. Null means "not known yet".
+  const [canSave, setCanSave] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    setCanSave(canSaveInPlace())
+  }, [])
 
   const load = useCallback((opened: OpenedFile) => {
     const parsed = parse(opened.text)
@@ -60,17 +72,26 @@ export default function Page() {
       return
     }
     docRef.current = parsed
+    // Objectives or initiatives may be sitting at Not Started with work
+    // already moving below them. Say so rather than fixing it silently.
+    const advanced = applyStatusRules(parsed)
     setFile(opened)
     setReport(validate(parsed))
     setData(toData(parsed))
-    setDirty(false)
-    setMessage(null)
+    setDirty(advanced.length > 0)
+    setMessage(
+      advanced.length > 0
+        ? `${advanced.join(', ')} advanced to In Progress, following the work below.`
+        : null,
+    )
+    setTab(0)
   }, [])
 
   const commit = useCallback((mutate: (doc: Document) => void) => {
     const doc = docRef.current
     if (!doc) return
     mutate(doc)
+    applyStatusRules(doc)
     setReport(validate(doc))
     setData(toData(doc))
     setDirty(true)
@@ -174,53 +195,26 @@ export default function Page() {
     return () => window.removeEventListener('beforeunload', warn)
   }, [dirty])
 
+  const initiatives = data?.strategic_initiatives ?? []
+  // Clamp: loading a shorter file must not leave the tab pointing past the end.
+  const active = Math.min(tab, Math.max(initiatives.length - 1, 0))
+  const current = initiatives[active]
+  // Pickers offer the values already in the file, so spellings stay stable.
+  const pools = collectPools(data)
+
   return (
-    <div className="mx-auto min-h-screen max-w-5xl px-6 pb-24">
-      <header className="sticky top-0 z-10 -mx-6 mb-6 flex items-center gap-4 border-b border-line bg-canvas/90 px-6 py-3 backdrop-blur">
-        <Image
-          src="/logo-mark.png"
-          alt=""
-          width={26}
-          height={22}
-          priority
-          className="shrink-0"
+    <div className={`mx-auto min-h-screen max-w-5xl px-6 pb-24 ${data ? '' : 'pt-6'}`}>
+      {/* Nothing open: the empty state carries the logo and its own Open
+          button, so a bar above it would only repeat itself. */}
+      {data && (
+        <EditorHeader
+          file={file}
+          dirty={dirty}
+          report={report}
+          onOpen={openFile}
+          onSave={saveFile}
         />
-        <h1 className="shrink-0 font-semibold">GreenOKRa</h1>
-
-        {file && (
-          <span className="flex min-w-0 items-center gap-1.5 text-sm text-ink-muted">
-            <span className="truncate font-mono">{file.name}</span>
-            {dirty && (
-              <span
-                title="Unsaved changes"
-                className="size-1.5 shrink-0 rounded-full bg-warn"
-              />
-            )}
-          </span>
-        )}
-
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {report && <ReportPanel report={report} />}
-          <button
-            type="button"
-            onClick={openFile}
-            className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-xs hover:border-ink-faint"
-          >
-            <FolderOpen size={13} />
-            Open
-          </button>
-          {file && (
-            <button
-              type="button"
-              onClick={saveFile}
-              className="flex items-center gap-1.5 rounded-md border border-accent-dim bg-accent-dim/20 px-2.5 py-1 text-xs text-ink hover:bg-accent-dim/35"
-            >
-              {file.handle ? <Save size={13} /> : <FileDown size={13} />}
-              {file.handle ? 'Save' : 'Download'}
-            </button>
-          )}
-        </div>
-      </header>
+      )}
 
       <input
         ref={fileInput}
@@ -241,18 +235,30 @@ export default function Page() {
       )}
 
       {!data ? (
-        <EmptyState onOpen={openFile} onExample={loadExample} />
+        <EmptyState onOpen={openFile} onExample={loadExample} canSave={canSave} />
       ) : (
-        <main className="space-y-4">
-          {(data.strategic_initiatives ?? []).map((initiative, index) => (
+        <main>
+          <InitiativeTabs
+            initiatives={initiatives}
+            active={active}
+            onSelect={setTab}
+            onAdd={(id, title, timeframe) => {
+              editor.addInitiative(id, title, timeframe)
+              setTab(initiatives.length) // show what was just created
+            }}
+          />
+          {current ? (
             <InitiativeCard
-              key={initiative.id ?? index}
-              initiative={initiative}
-              index={index}
+              initiative={current}
+              index={active}
+              pools={pools}
               editor={editor}
             />
-          ))}
-          <NewInitiative onAdd={editor.addInitiative} />
+          ) : (
+            <p className="mt-16 text-center text-sm text-ink-muted">
+              This file has no strategic initiatives yet. Add one above.
+            </p>
+          )}
         </main>
       )}
     </div>
@@ -262,12 +268,14 @@ export default function Page() {
 function EmptyState({
   onOpen,
   onExample,
+  canSave,
 }: {
   onOpen: () => void
   onExample: () => void
+  canSave: boolean | null
 }) {
   return (
-    <div className="mt-24 flex flex-col items-center gap-6 text-center">
+    <div className="flex min-h-[85vh] flex-col items-center justify-center gap-6 text-center">
       <Image src="/logo.png" alt="GreenOKRa" width={220} height={129} priority />
       <div>
         <h2 className="text-lg font-medium">No file open</h2>
@@ -294,7 +302,7 @@ function EmptyState({
           Load the example
         </button>
       </div>
-      {!canSaveInPlace() && (
+      {canSave === false && (
         <p className="max-w-md text-xs text-ink-faint">
           This browser cannot write files in place, so saving will download a copy.
           Chrome and Edge can save back to the file you opened.
@@ -304,56 +312,63 @@ function EmptyState({
   )
 }
 
-/** New initiatives need an id up front, since ids are permanent. */
-function NewInitiative({
-  onAdd,
+/** The bar shown while a file is open: what it is, and what to do with it. */
+function EditorHeader({
+  file,
+  dirty,
+  report,
+  onOpen,
+  onSave,
 }: {
-  onAdd: (id: string, title: string, timeframe: string) => void
+  file: OpenedFile | null
+  dirty: boolean
+  report: Report | null
+  onOpen: () => void
+  onSave: () => void
 }) {
-  const [id, setId] = useState('')
-  const [title, setTitle] = useState('')
-  const [timeframe, setTimeframe] = useState('')
-  const valid = /^[A-Za-z]{2,5}$/.test(id.trim()) && title.trim() !== ''
-
-  const add = () => {
-    if (!valid) return
-    onAdd(id, title, timeframe.trim() || String(new Date().getFullYear()))
-    setId('')
-    setTitle('')
-    setTimeframe('')
-  }
-
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-dashed border-line p-3">
-      <input
-        value={id}
-        onChange={(event) => setId(event.target.value.toUpperCase())}
-        placeholder="ID"
-        maxLength={5}
-        className="field w-16 font-mono text-sm uppercase"
-      />
-      <input
-        value={title}
-        onChange={(event) => setTitle(event.target.value)}
-        placeholder="New strategic initiative"
-        onKeyDown={(event) => event.key === 'Enter' && add()}
-        className="field flex-1 text-sm"
-      />
-      <input
-        value={timeframe}
-        onChange={(event) => setTimeframe(event.target.value)}
-        placeholder="2026"
-        className="field w-20 text-sm"
-      />
-      <button
-        type="button"
-        onClick={add}
-        disabled={!valid}
-        className="flex shrink-0 items-center gap-1 rounded-md border border-line px-2.5 py-1 text-xs enabled:hover:border-accent-dim disabled:opacity-40"
-      >
-        <FilePlus2 size={12} />
-        Add
-      </button>
-    </div>
+    <header
+      className="sticky top-0 z-10 -mx-6 mb-6 flex items-center gap-4 border-b
+        border-line bg-canvas/90 px-6 py-3 backdrop-blur"
+    >
+      <Image src="/logo-mark.png" alt="" width={26} height={22} priority className="shrink-0" />
+      <h1 className="shrink-0 font-semibold">GreenOKRa</h1>
+
+      {file && (
+        <span className="flex min-w-0 items-center gap-1.5 text-sm text-ink-muted">
+          <span className="truncate font-mono">{file.name}</span>
+          {dirty && (
+            <span
+              title="Unsaved changes"
+              className="size-1.5 shrink-0 rounded-full bg-warn"
+            />
+          )}
+        </span>
+      )}
+
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        {report && <ReportPanel report={report} />}
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1
+            text-xs hover:border-ink-faint"
+        >
+          <FolderOpen size={13} />
+          Open
+        </button>
+        {file && (
+          <button
+            type="button"
+            onClick={onSave}
+            className="flex items-center gap-1.5 rounded-md border border-accent-dim
+              bg-accent-dim/20 px-2.5 py-1 text-xs text-ink hover:bg-accent-dim/35"
+          >
+            {file.handle ? <Save size={13} /> : <FileDown size={13} />}
+            {file.handle ? 'Save' : 'Download'}
+          </button>
+        )}
+      </div>
+    </header>
   )
 }

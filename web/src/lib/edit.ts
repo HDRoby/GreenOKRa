@@ -12,7 +12,7 @@
 
 import { Document, Pair, Scalar, YAMLMap, YAMLSeq, isMap, isScalar, isSeq } from 'yaml'
 
-import { KR_KEYS, OBJECTIVE_KEYS, SI_KEYS } from './okr.ts'
+import { KR_KEYS, OBJECTIVE_KEYS, SI_KEYS, STATUSES, canonical } from './okr.ts'
 
 export type Path = (string | number)[]
 
@@ -314,6 +314,104 @@ export function addInitiative(
     objectives.items.push(objective)
   }
   list.items.push(initiative)
+}
+
+// ------------------------------------------------------------------------- //
+// Status
+// ------------------------------------------------------------------------- //
+
+/**
+ * The two statuses a person decides. Everything else follows from the level
+ * below: an objective from its key results, an initiative from its objectives.
+ */
+export const STATUS_DECISIONS = ['Completed', 'Aborted'] as const
+
+/**
+ * Advance a `Not Started` parent to `In Progress` when any child is already in
+ * progress. Returns whether it moved.
+ *
+ * `Completed` and `Aborted` are human judgements and are never overwritten —
+ * an initiative can be closed while objectives still move under it. The
+ * transition is not reversed either: work having stopped is not the same as it
+ * never having started.
+ */
+function advance(
+  doc: Document,
+  parent: YAMLMap,
+  path: Path,
+  children: YAMLSeq,
+  order: readonly string[],
+): boolean {
+  if (canonical(parent.get('status'), STATUSES) !== 'Not Started') return false
+  const active = children.items.some(
+    (child) => isMap(child) && canonical(child.get('status'), STATUSES) === 'In Progress',
+  )
+  if (!active) return false
+  setField(doc, path, 'status', 'In Progress', order)
+  return true
+}
+
+/**
+ * Editor policy rather than a format rule: objectives and initiatives left at
+ * `Not Started` advance once work below them has begun.
+ *
+ * Returns the references it advanced, so the change can be reported rather than
+ * made silently.
+ */
+export function applyStatusRules(doc: Document): string[] {
+  const initiatives = doc.getIn(['strategic_initiatives'], true)
+  if (!isSeq(initiatives)) return []
+
+  const advanced: string[] = []
+  initiatives.items.forEach((initiative, initiativeIndex) => {
+    if (!isMap(initiative)) return
+    const path = initiativePath(initiativeIndex)
+    const objectives = initiative.get('objectives', true)
+    if (!isSeq(objectives)) return
+    const initiativeId = String(initiative.get('id') ?? initiativeIndex)
+
+    // Objectives first: a key result starting work then carries all the way up
+    // to its initiative within this one pass.
+    objectives.items.forEach((objective, objectiveIndex) => {
+      if (!isMap(objective)) return
+      const keyResults = objective.get('key_results', true)
+      if (!isSeq(keyResults)) return
+      const moved = advance(
+        doc,
+        objective,
+        objectivePath(initiativeIndex, objectiveIndex),
+        keyResults,
+        OBJECTIVE_KEYS,
+      )
+      if (moved) {
+        advanced.push(`${initiativeId}.${objective.get('id') ?? objectiveIndex}`)
+      }
+    })
+
+    if (advance(doc, initiative, path, objectives, SI_KEYS)) {
+      advanced.push(initiativeId)
+    }
+  })
+  return advanced
+}
+
+/**
+ * What a status dropdown should offer, for an objective or an initiative.
+ *
+ * Only the human decisions are selectable. The current value is always
+ * included so the control can display it, and once a decision has been taken
+ * `In Progress` reappears so it can be undone.
+ */
+export function statusOptions(current: string | undefined): string[] {
+  const status = canonical(current, STATUSES)
+  if (status === 'Completed' || status === 'Aborted') {
+    return [
+      status,
+      'In Progress',
+      ...STATUS_DECISIONS.filter((decision) => decision !== status),
+    ]
+  }
+  return status ? [status, ...STATUS_DECISIONS] : [...STATUS_DECISIONS]
 }
 
 export const FIELD_ORDER = {

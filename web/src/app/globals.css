@@ -62,3 +62,17 @@ body {
   color: var(--color-ink-faint);
   font-style: italic;
 }
+
+/*
+ * The browser's calendar glyph is a dark icon, which is invisible against a
+ * dark field. Inverting it is the only way to make the picker discoverable.
+ */
+input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+input[type='date']::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}

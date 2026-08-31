@@ -843,7 +843,28 @@ export function initiativeProgress(initiative: Initiative): number | null {
   return mean(values)
 }
 
+/**
+ * Percentages are shown to the nearest 5%, without decimals.
+ *
+ * A rollup of a handful of statuses lands on numbers like 41.666…, and that
+ * decimal implies a precision the statuses behind it do not have. The
+ * underlying arithmetic stays exact; only what is displayed is rounded.
+ *
+ * 0% and 100% are reserved for actually none and actually all, so a nearly
+ * finished initiative reads 95% rather than claiming to be done.
+ */
+export function displayProgress(progress: number | null): number | null {
+  if (progress === null) return null
+  if (progress >= 100) return 100
+  if (progress <= 0) return 0
+  const rounded = Math.round(progress / 5) * 5
+  if (rounded >= 100) return 95
+  if (rounded <= 0) return 5
+  return rounded
+}
+
 /** Percentages are undefined, not zero, when everything in scope is aborted. */
 export function formatProgress(progress: number | null): string {
-  return progress === null ? '—' : `${progress.toFixed(1)}%`
+  const rounded = displayProgress(progress)
+  return rounded === null ? '—' : `${rounded}%`
 }

@@ -98,11 +98,26 @@ entirely in the browser. No backend, no auth, no database, nothing uploaded.
 You keep the files; git is the history.
 
 - **Open** a `.yaml` file from disk, or load the bundled example
-- **View** initiatives, objectives and key results with progress computed live
-- **Edit** any field in place — click, type, tab away. Selects for status,
-  priority and complexity
+- **Browse** one initiative at a time — each gets a tab showing its title and
+  progress, with its details at the top and its objectives below
+- **Expand** a key result to see its owners, dates and review notes; collapsed,
+  it shows a one-line summary with status, priority and progress
+- **Edit** any field in place — click, type, tab away
+- **Pick** rather than type where a free-text box would only invite drift:
+  timeframes, target dates, progress in tenths, and owner names drawn from the
+  names already in the file
 - **Add** initiatives, objectives, key results and links
 - **Save** back to the file you opened, with `⌘S`
+
+Owners appear as coloured chips, one colour per person, so the same name is
+recognisable at a glance across the file. Priority and complexity share their
+values (High, Medium, Low), so each carries an icon — a flag for priority,
+layers for complexity — to tell them apart without reading.
+
+Initiative and objective statuses are mostly derived: each advances from
+`Not Started` to `In Progress` once work below it starts, so moving one key
+result can carry up both levels. Only `Completed` and `Aborted` are offered as
+choices, because only those are decisions. Either can be undone.
 
 Everything is validated as you type, and the counter in the header opens a panel
 listing errors, warnings and anything that was tidied.

@@ -8,6 +8,7 @@ import {
   type Objective,
   STATUSES,
   canonical,
+  displayProgress,
   formatProgress,
   initiativeProgress,
   keyResultProgress,
@@ -386,9 +387,29 @@ describe('progress rollup', () => {
     expect(initiativeProgress(initiative)).toBe(100)
   })
 
-  test('formats a percentage to one decimal place', () => {
-    expect(formatProgress(47.5)).toBe('47.5%')
-    expect(formatProgress(0)).toBe('0.0%')
+  test('rounds a percentage to the nearest 5, without decimals', () => {
+    expect(formatProgress(47.5)).toBe('50%')
+    expect(formatProgress(46.7)).toBe('45%')
+    expect(formatProgress(41.666)).toBe('40%')
+    expect(formatProgress(40)).toBe('40%')
+    expect(formatProgress(null)).toBe('—')
+  })
+
+  test('keeps 0% and 100% for actually none and actually all', () => {
+    expect(displayProgress(0)).toBe(0)
+    expect(displayProgress(100)).toBe(100)
+    // Nearly finished is not finished, and barely begun is not unbegun.
+    expect(displayProgress(99.9)).toBe(95)
+    expect(displayProgress(0.4)).toBe(5)
+    expect(formatProgress(99.9)).toBe('95%')
+  })
+
+  test('leaves the underlying arithmetic exact', () => {
+    const objective: Objective = {
+      key_results: [kr('Completed'), kr('Completed'), kr('Not Started')],
+    }
+    expect(objectiveProgress(objective)).toBeCloseTo(66.667, 2)
+    expect(formatProgress(objectiveProgress(objective))).toBe('65%')
   })
 })
 

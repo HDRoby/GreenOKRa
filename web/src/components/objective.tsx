@@ -2,11 +2,13 @@
 
 import { ExternalLink, Link2, Plus, X } from 'lucide-react'
 
-import { type Path, keyResultPath } from '@/lib/edit.ts'
-import { STATUSES, type Objective, objectiveProgress } from '@/lib/okr.ts'
+import { type Path, keyResultPath, statusOptions } from '@/lib/edit.ts'
+import type { Pools } from '@/lib/labels.ts'
+import { type Objective, objectiveProgress } from '@/lib/okr.ts'
 
 import type { Editor } from './editor.ts'
-import { EnumSelect, NameList, ProgressBar, Reference, TextField } from './fields.tsx'
+import { EnumSelect, ProgressBar, Reference, TextField } from './fields.tsx'
+import { LabelPicker } from './label-picker.tsx'
 import { KeyResultRow } from './key-result.tsx'
 
 export function ObjectiveCard({
@@ -14,12 +16,16 @@ export function ObjectiveCard({
   initiativeId,
   initiativeIndex,
   objectiveIndex,
+  timeframe,
+  pools,
   editor,
 }: {
   objective: Objective
   initiativeId: string
   initiativeIndex: number
   objectiveIndex: number
+  timeframe: string | undefined
+  pools: Pools
   editor: Editor
 }) {
   const path: Path = ['strategic_initiatives', initiativeIndex, 'objectives', objectiveIndex]
@@ -47,23 +53,30 @@ export function ObjectiveCard({
           />
 
           <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-faint">
-            <label className="flex items-center gap-1">
+            <span className="flex items-center gap-1.5">
               theme
-              <TextField
-                value={objective.theme ?? ''}
-                placeholder="none"
-                onCommit={(value) => editor.setObjective(path, 'theme', value, false)}
-                className="w-48 text-ink-muted"
+              {/* One theme per objective, and optional, so it can be cleared. */}
+              <LabelPicker
+                values={objective.theme ? [objective.theme] : []}
+                known={pools.themes}
+                multiple={false}
+                clearable
+                label="theme"
+                onChange={(themes) =>
+                  editor.setObjective(path, 'theme', themes[0] ?? '', false)
+                }
               />
-            </label>
-            <label className="flex items-center gap-1">
+            </span>
+            <span className="flex items-center gap-1.5">
               owners
-              <NameList
-                names={objective.owners ?? []}
-                placeholder="from key results"
-                onCommit={(names) => editor.setObjectiveOwners(path, names)}
+              <LabelPicker
+                values={objective.owners ?? []}
+                known={pools.people}
+                multiple
+                label={`${reference} owners`}
+                onChange={(names) => editor.setObjectiveOwners(path, names)}
               />
-            </label>
+            </span>
           </div>
         </div>
 
@@ -71,53 +84,61 @@ export function ObjectiveCard({
           <EnumSelect
             label={`${reference} status`}
             value={objective.status ?? ''}
-            options={STATUSES}
+            options={statusOptions(objective.status)}
             onChange={(value) => editor.setObjective(path, 'status', value)}
           />
           <ProgressBar progress={objectiveProgress(objective)} />
         </div>
       </header>
 
-      {links.length > 0 && (
-        <div className="space-y-1 px-4 pb-2">
-          {links.map((link, index) => (
-            <div key={index} className="flex items-center gap-2 text-xs">
-              <Link2 size={12} className="shrink-0 text-ink-faint" />
-              <TextField
-                value={link.title ?? ''}
-                placeholder="Title"
-                onCommit={(value) => editor.setLink(path, index, 'title', value)}
-                className="w-56 text-ink-muted"
-              />
-              <TextField
-                value={link.url ?? ''}
-                placeholder="https://…"
-                onCommit={(value) => editor.setLink(path, index, 'url', value)}
-                className="min-w-0 flex-1 font-mono text-ink-faint"
-              />
-              {link.url && (
-                <a
-                  href={link.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="shrink-0 text-ink-faint hover:text-accent"
-                  aria-label="Open link"
-                >
-                  <ExternalLink size={12} />
-                </a>
-              )}
-              <button
-                type="button"
-                onClick={() => editor.removeLink(path, index)}
-                className="shrink-0 text-ink-faint hover:text-dropped"
-                aria-label="Remove link"
+      {/* Links belong with the objective's own detail, above its key results,
+          and the way to add one belongs directly under them. */}
+      <div className="space-y-1 px-4 pb-3">
+        {links.map((link, index) => (
+          <div key={index} className="flex items-center gap-2 text-xs">
+            <Link2 size={12} className="shrink-0 text-ink-faint" />
+            <TextField
+              value={link.title ?? ''}
+              placeholder="Title"
+              onCommit={(value) => editor.setLink(path, index, 'title', value)}
+              className="w-56 text-ink-muted"
+            />
+            <TextField
+              value={link.url ?? ''}
+              placeholder="https://…"
+              onCommit={(value) => editor.setLink(path, index, 'url', value)}
+              className="min-w-0 flex-1 font-mono text-ink-faint"
+            />
+            {link.url && (
+              <a
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                className="shrink-0 text-ink-faint hover:text-accent"
+                aria-label="Open link"
               >
-                <X size={12} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+                <ExternalLink size={12} />
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={() => editor.removeLink(path, index)}
+              className="shrink-0 text-ink-faint hover:text-dropped"
+              aria-label="Remove link"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => editor.addLink(path)}
+          className="flex items-center gap-1 text-xs text-ink-faint hover:text-accent"
+        >
+          <Plus size={12} />
+          Link
+        </button>
+      </div>
 
       <div>
         {(objective.key_results ?? []).map((keyResult, index) => (
@@ -126,12 +147,14 @@ export function ObjectiveCard({
             keyResult={keyResult}
             reference={`${reference}.${keyResult.id ?? '?'}`}
             path={keyResultPath(initiativeIndex, objectiveIndex, index)}
+            timeframe={timeframe}
+            people={pools.people}
             editor={editor}
           />
         ))}
       </div>
 
-      <footer className="flex gap-4 border-t border-line/60 px-4 py-2">
+      <footer className="border-t border-line/60 px-4 py-2">
         <button
           type="button"
           onClick={() => editor.addKeyResult(path)}
@@ -139,14 +162,6 @@ export function ObjectiveCard({
         >
           <Plus size={12} />
           Key result
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.addLink(path)}
-          className="flex items-center gap-1 text-xs text-ink-faint hover:text-accent"
-        >
-          <Plus size={12} />
-          Link
         </button>
       </footer>
     </section>

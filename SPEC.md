@@ -73,7 +73,7 @@ Top level has exactly two keys:
 | `id` | yes | Short uppercase code, 2–5 letters, unique in the file: `PEP`, `PRO`, `TEK`. Stable — everything refers to it. |
 | `title` | yes | Plain-language name, e.g. `People`, `Process`, `Technology`. |
 | `owner` | yes | Single accountable person for the whole initiative. |
-| `timeframe` | yes | `"2026"`, `"2026-Q3"`, `"H1-2026"`. **Quote it** — see [Gotchas](#gotchas). |
+| `timeframe` | yes | A year, optionally narrowed to a half or a quarter: `"2026"`, `"2026.H1"`, `"2026.Q3"`. **Quote it** — see [Gotchas](#gotchas). |
 | `review_cadence` | no | Free text: `Weekly check-in`, `Monthly review, quarterly sponsor review`. |
 | `status` | yes | See [Status](#status). |
 | `description` | no | Free-form context. |
@@ -172,6 +172,22 @@ Key Results still read `In Progress`.
 
 Percentages, by contrast, are always computed.
 
+### One editor convenience
+
+The editor advances anything sitting at `Not Started` to `In Progress` as soon
+as work below it has begun — an Objective when one of its Key Results is
+`In Progress`, a Strategic Initiative when one of its Objectives is — and says
+so when it does. A Key Result starting work therefore carries up both levels at
+once.
+
+That is a convenience, not a rule of the format: a file where the levels
+disagree is still valid, and any other tool is free to leave it alone.
+
+Two things it will not do. `Completed` and `Aborted` are never overwritten —
+closing something is a decision, and work still moving underneath does not undo
+it. And the transition is never reversed: work having stopped is not the same as
+it never having started.
+
 ---
 
 ## Progress
@@ -200,7 +216,17 @@ Two exclusion rules:
   `—`, not `0%`.
 
 No weights, no confidence scores. If a Key Result needs to say it is 80% of the
-way there, that is what the optional `progress` field is for.
+way there, that is what the optional `progress` field is for — in steps of 10%,
+because nobody knows a Key Result is 47% done.
+
+### Displaying a percentage
+
+Rollups produce numbers like 41.666…, so a displayed percentage is **rounded to
+the nearest 5% and shown without decimals**. The arithmetic stays exact; only
+the display rounds.
+
+`0%` and `100%` mean actually none and actually all. Anything in between rounds
+to at most `95%`, so a nearly finished initiative never claims to be done.
 
 ---
 
@@ -248,7 +274,7 @@ here:
 |---|---|---|
 | `timeframe: 2026` | integer `2026` | `timeframe: "2026"` |
 | `target_date: 2026-09-30` | a date object | `target_date: "2026-09-30"` |
-| `timeframe: 2026-Q3` | string ✓ | fine as-is |
+| `timeframe: 2026.Q3` | string ✓ | fine as-is |
 
 `target_date` and `timeframe` are always strings so one type covers both real
 dates and labels like `Q3`. Inside `progress_notes`, `date` is a genuine date and
