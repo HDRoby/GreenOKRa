@@ -16,6 +16,7 @@ web/
   src/lib/labels.ts          the people and themes a file reuses, and their colours
   src/lib/filter.ts          narrowing the view to one person
   src/lib/review.ts          whether a key result is overdue a review
+  src/lib/portfolio.ts       key results banded three ways, for the snapshot chart
   src/lib/file-access.ts     opening and saving in the browser
   src/cli.ts, src/bin.ts     terminal front end (check / show)
   src/app/                   the Next.js page
@@ -62,10 +63,19 @@ wrong record. Use `withIndices` from `filter.ts`, which pairs each item with its
 true position *before* filtering. This is silent data corruption if you get it
 wrong; there are tests pinning it.
 
-**Editor conveniences are not format rules.** The status auto-advance and the
-review-overdue clock live outside `validate()`, and `SPEC.md` says plainly that
-a file they disagree with is still valid. Anything done for the user's
-convenience belongs on that side of the line.
+**Editor conveniences are not format rules.** The status auto-advance, the
+review-overdue clock and the snapshot's three-way banding live outside
+`validate()`, and `SPEC.md` says plainly that a file they disagree with is
+still valid. Anything done for the user's convenience belongs on that side of
+the line — which is why `portfolio.ts` is its own file and not a function in
+`okr.ts`. It still borrows from the format rather than restating it: the bands
+come from `canonical()` and the ladder, so a messily written status lands where
+the rest of the app would put it.
+
+**A view still belongs in `lib/`.** There is no React test runner, so anything
+a chart computes — a tally, a scale, a band — is written and tested in `lib/`
+and the component only draws it. `portfolio.ts` has nine tests; the component
+that renders it has none, and that division is the point.
 
 **Fixtures and examples are canonical.** Every test fixture and the YAML example
 in `SPEC.md` parse with no errors and no repairs. They are the first thing
@@ -204,7 +214,8 @@ Conventions worth keeping:
   commit immediately
 - **One component per affordance.** `AddButton`, `LabelPicker`, `PersonPicker`,
   `DeleteButton`, `Dropdown` and `Wordmark` exist so the same control cannot
-  drift apart in four places
+  drift apart in four places. The same applies to smaller shared spellings:
+  `priorityIcon` moved into `fields.tsx` the moment a third place drew it
 - **Colours live in one map.** `TONES` in `fields.tsx` holds each value's pill,
   text and bar spellings in a single entry, because Tailwind only sees literal
   class names — `text-${colour}` never reaches the stylesheet, so composing one
@@ -214,9 +225,32 @@ Conventions worth keeping:
   the order is the meaning and a ripening reads as a progression where four
   hues read as four categories. `Not Started` stays neutral and `Aborted` red:
   neither is a rung. People are neutral, because a hue hashed from a name
-  teaches the reader nothing. The accent marks the person being filtered on
+  teaches the reader nothing. The accent marks the person being filtered on —
+  and note it now shares the ramp's hue, so a green thing drawn *on* a status
+  fill needs a different colour: the heat map's hover ring is ink for exactly
+  that reason. The snapshot's middle band steps off the ramp to blue, because
+  three rungs collapsed into one are not any single status and must not wear
+  one's colour
+- **Check a colour before trusting it.** Every value in the status ramp was
+  converted to sRGB to confirm it does not clip — clipping would have flattened
+  the top of a ramp whose whole meaning is that it climbs — and checked for
+  4.5:1 on the canvas. A palette is the one place here where a mistake is
+  invisible to the tests and to the type checker both
 - **Initiatives are tabs, objectives and key results are lists.** Tabs suit a
   handful; a strip that scrolls sideways hides most of what it holds
+- **Two reading views balance the editing ones**, because tabs show a file one
+  initiative at a time. `heat-map.tsx` sits under one initiative's objectives —
+  objectives down, key results across, ragged rows on purpose, since a gap says
+  where the weight sits. `portfolio-snapshot.tsx` sits under everything and
+  puts every initiative on one scale. Both respect the person filter with the
+  same downhill ownership the lists use, so filtering redraws them as that
+  person's portfolio
+- **A chart's length is a count, not a percentage.** Snapshot bars are measured
+  against the largest initiative. Equal-length bars would say every initiative
+  is the same size, which is the one thing a portfolio view must not say. What
+  is excluded gets printed under the chart, because an aborted key result
+  shortens a bar without leaving a trace, and an unexplained short bar reads as
+  a mistake
 - **Never call a browser-only function during render.** `canSaveInPlace()`
   answers differently on the server and in the browser, which breaks hydration.
   Resolve it in an effect
@@ -226,8 +260,7 @@ Conventions worth keeping:
 - **Browser-only.** No API routes, no server actions touching a filesystem, no
   database
 
-Two CSS traps, both from the same cause — Tailwind's reset and layers outrank
-plain CSS in ways that are silent when they bite:
+Three traps, each silent when it bites:
 
 - **Custom classes belong in `@layer components`.** Unlayered CSS outranks
   every Tailwind utility, so `.field { width: 100% }` written plainly was
@@ -235,6 +268,15 @@ plain CSS in ways that are silent when they bite:
   utility appears to do nothing, check what layer its competition is in
 - **A modal `<dialog>` needs `m-auto`.** It centres itself on `margin: auto`,
   which the reset zeroes, so without it the dialog opens in the corner
+
+  (Both of the above come from one cause: Tailwind's reset and layers outrank
+  plain CSS in ways nothing warns you about.)
+- **Do not rely on a native `title` tooltip.** The heat map's never appeared:
+  its `overflow-x-auto` wrapper makes `overflow-y` compute to `auto` too, which
+  clips the tip. A native tip is also delayed by about a second, unstyleable
+  and absent on touch. Where hovering must explain something, draw it — the
+  heat map keeps one fixed line below the matrix that fills in on hover, of a
+  fixed height so pointing at things does not shift the page
 
 ## Editing OKR files
 
