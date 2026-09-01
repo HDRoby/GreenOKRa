@@ -20,6 +20,7 @@ import {
   TimeframeSelect,
 } from './fields.tsx'
 import { DeleteButton } from './delete-button.tsx'
+import { HeatMap } from './heat-map.tsx'
 import { PersonPicker } from './person-picker.tsx'
 import { ObjectiveCard } from './objective.tsx'
 
@@ -146,6 +147,13 @@ export function InitiativeCard({
         )}
 
         <AddButton label="Objective" onClick={() => editor.addObjective(path)} />
+
+        <HeatMap
+          objectives={objectives}
+          person={person}
+          inherited={revealsAll}
+          timeframe={initiative.timeframe}
+        />
       </div>
     </article>
   )

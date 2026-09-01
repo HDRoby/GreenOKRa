@@ -1,10 +1,17 @@
 'use client'
 
-import { Plus } from 'lucide-react'
+import {
+  ChevronDown,
+  ChevronUp,
+  ChevronsLeftRight,
+  ChevronsUp,
+  Plus,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { timeframeGroups } from '@/lib/dates.ts'
 import {
+  PRIORITIES,
   STATUSES,
   canonical,
   displayProgress,
@@ -168,6 +175,34 @@ function toneFor(value: string): string {
 /** Just the colour, for places that show the word rather than a pill. */
 export function textToneFor(value: string): string {
   return TONES[value]?.text ?? 'text-ink-muted'
+}
+
+/** The solid fill, for a bar or a heat-map cell. */
+export function barToneFor(value: string): string {
+  return TONES[value]?.bar ?? 'bg-line'
+}
+
+/**
+ * Priority as a glyph: the arrow points the way the urgency does.
+ *
+ * Here rather than in one component, because the key result row, its card and
+ * the heat map all draw it and must draw the same thing.
+ */
+const PRIORITY_ICONS: Record<string, typeof ChevronUp> = {
+  Blocker: ChevronsUp,
+  High: ChevronUp,
+  Medium: ChevronsLeftRight,
+  Low: ChevronDown,
+}
+
+export function priorityIcon(
+  priority: string | undefined,
+  size: number,
+  strokeWidth?: number,
+) {
+  const value = canonical(priority, PRIORITIES)
+  const Icon = value === null ? null : PRIORITY_ICONS[value]
+  return Icon ? <Icon size={size} strokeWidth={strokeWidth} /> : null
 }
 
 /**

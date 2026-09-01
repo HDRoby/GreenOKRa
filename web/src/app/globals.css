@@ -29,15 +29,26 @@
   --color-dropped: oklch(0.62 0.13 25);
 
   /*
-   * The status ladder, as a hue sweep from violet through blue and teal to
-   * green. Distinct hues rather than one hue getting lighter, because at pill
-   * size a lightness ramp is unreadable.
+   * The status ladder: one green ripening. Started is washed and greyish, and
+   * each rung above it gains chroma and lightness until Completed, which is
+   * the most vivid colour on the page. The rung is legible from its saturation
+   * alone, so a row of cells reads as a progression rather than as four
+   * unrelated hues.
+   *
+   * A small hue drift, 168 down to 155, comes with it: at pill size four steps
+   * of chroma alone are hard to separate, and cooling the early rungs slightly
+   * widens the gap without leaving the family. Every value is inside sRGB —
+   * clipping would flatten the top of the ramp — and every one clears 4.5:1 as
+   * text on the canvas.
+   *
+   * Off the ladder and so off the ramp: idle is neutral because nothing has
+   * happened yet, and dropped is red because abandonment is not progress.
    */
   --color-idle: oklch(0.6 0.01 260);
-  --color-begun: oklch(0.72 0.13 292);
-  --color-active: oklch(0.75 0.13 245);
-  --color-closing: oklch(0.76 0.12 195);
-  --color-done: oklch(0.72 0.15 155);
+  --color-begun: oklch(0.64 0.05 168);
+  --color-active: oklch(0.68 0.09 163);
+  --color-closing: oklch(0.72 0.135 159);
+  --color-done: oklch(0.78 0.19 155);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;

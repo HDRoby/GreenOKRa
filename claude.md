@@ -209,8 +209,11 @@ Conventions worth keeping:
   text and bar spellings in a single entry, because Tailwind only sees literal
   class names — `text-${colour}` never reaches the stylesheet, so composing one
   from the other is not an option
-- **Colour is spent where it means something.** Statuses are a hue ramp because
-  the order is the meaning; people are neutral, because a hue hashed from a name
+- **Colour is spent where it means something.** The four working statuses are
+  one green ripening — washed at `Started`, most vivid at `Completed` — because
+  the order is the meaning and a ripening reads as a progression where four
+  hues read as four categories. `Not Started` stays neutral and `Aborted` red:
+  neither is a rung. People are neutral, because a hue hashed from a name
   teaches the reader nothing. The accent marks the person being filtered on
 - **Initiatives are tabs, objectives and key results are lists.** Tabs suit a
   handful; a strip that scrolls sideways hides most of what it holds

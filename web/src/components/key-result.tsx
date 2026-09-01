@@ -1,13 +1,6 @@
 'use client'
 
-import {
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  ChevronsLeftRight,
-  ChevronsUp,
-  Layers,
-} from 'lucide-react'
+import { ChevronRight, Layers } from 'lucide-react'
 import { Fragment, useState } from 'react'
 
 import type { PersonFilter } from '@/lib/filter.ts'
@@ -30,6 +23,7 @@ import {
   Reference,
   StatusBar,
   TextField,
+  priorityIcon,
   textToneFor,
 } from './fields.tsx'
 import { PersonPicker } from './person-picker.tsx'
@@ -206,23 +200,6 @@ export function KeyResultRow({
       )}
     </div>
   )
-}
-
-/**
- * Priority as a glyph: the arrow points the way the urgency does, and the
- * colour repeats it. On a row there is no space for a word.
- */
-const PRIORITY_ICONS: Record<string, typeof ChevronUp> = {
-  Blocker: ChevronsUp,
-  High: ChevronUp,
-  Medium: ChevronsLeftRight,
-  Low: ChevronDown,
-}
-
-function priorityIcon(priority: string | undefined, size: number) {
-  const value = canonical(priority, PRIORITIES)
-  const Icon = value === null ? null : PRIORITY_ICONS[value]
-  return Icon ? <Icon size={size} /> : null
 }
 
 function PriorityMark({ priority }: { priority: string | undefined }) {
