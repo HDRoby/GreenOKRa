@@ -10,6 +10,7 @@ import { ReportPanel } from '@/components/report-panel.tsx'
 import { Wordmark } from '@/components/wordmark.tsx'
 import { PersonFilterSelect } from '@/components/person-filter.tsx'
 import { InitiativeTabs } from '@/components/tabs.tsx'
+import { PortfolioSnapshot } from '@/components/portfolio-snapshot.tsx'
 import {
   type Path,
   addInitiative,
@@ -338,6 +339,11 @@ export default function Page() {
               </p>
             )
           )}
+
+          {/* Below everything, and across every initiative rather than the
+              open one: the tabs show a file one column at a time, and this is
+              the only place the whole portfolio is in view at once. */}
+          <PortfolioSnapshot initiatives={visible} person={person} />
         </main>
       )}
     </div>
