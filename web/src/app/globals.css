@@ -29,6 +29,14 @@
   --color-dropped: oklch(0.62 0.13 25);
 
   /*
+   * The portfolio snapshot's middle band. Off the status ramp on purpose: that
+   * band is three rungs collapsed into one and so is not any single status, and
+   * a blue between the grey and the green separates work in flight from work
+   * finished at bar size, where two greens would not.
+   */
+  --color-underway: oklch(0.72 0.13 245);
+
+  /*
    * The status ladder: one green ripening. Started is washed and greyish, and
    * each rung above it gains chroma and lightness until Completed, which is
    * the most vivid colour on the page. The rung is legible from its saturation

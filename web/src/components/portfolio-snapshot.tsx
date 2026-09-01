@@ -11,7 +11,19 @@ import {
 import { type Initiative, type KeyResult } from '@/lib/okr.ts'
 import { BANDS, type Band, type Tally, tally } from '@/lib/portfolio.ts'
 
-import { barToneFor } from './fields.tsx'
+/**
+ * The fill per band.
+ *
+ * Not `barToneFor`: two of these are the status ramp's own colours, but the
+ * middle band is three rungs collapsed together and is therefore no single
+ * status, so it takes a blue of its own rather than borrowing one rung's green.
+ * At bar size that also keeps in-flight work plainly apart from finished work.
+ */
+const BAND_FILL: Record<Band, string> = {
+  'Not Started': 'bg-idle',
+  'In Progress': 'bg-underway',
+  Completed: 'bg-done',
+}
 
 /**
  * Every key result an initiative holds, with the filter applied at each level.
@@ -78,7 +90,7 @@ export function PortfolioSnapshot({
       <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-ink-faint">
         {BANDS.map((band) => (
           <span key={band} className="flex items-center gap-1.5">
-            <span className={`h-2.5 w-2.5 rounded-sm ${barToneFor(band)}`} />
+            <span className={`h-2.5 w-2.5 rounded-sm ${BAND_FILL[band]}`} />
             {band}
           </span>
         ))}
@@ -157,7 +169,7 @@ function Segment({
   return (
     <span
       className={`flex h-full items-center justify-center overflow-hidden
-        text-[11px] font-medium tabular-nums text-canvas ${barToneFor(band)}`}
+        text-[11px] font-medium tabular-nums text-canvas ${BAND_FILL[band]}`}
       style={{ width: `${(count / of) * 100}%` }}
       title={`${count} ${band}`}
     >
